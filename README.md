@@ -11,9 +11,9 @@ You can also select registered assets and display their inspectors, making it ea
 
 You can easily Open and Close them from a shortcut key.
 
-![](StoreDocument/ScriptableAssets.png)
+![](Editor/StoreDocument/ScriptableAssets.png)
 
-![](StoreDocument/Folders.png)
+![](Editor/StoreDocument/Folders.png)
 
 
 
