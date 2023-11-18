@@ -1,0 +1,8 @@
+{
+    "name": "com.yassy.assetlauncher",
+    "displayName": "Asset Launcher",
+    "version": "1.0.0",
+    "unity": "2020.1",
+    "description": "Simplified asset launcher for UnityEditor",
+    "license": "GPL-3.0"
+}
