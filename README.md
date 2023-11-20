@@ -16,6 +16,17 @@ You can easily Open and Close them from a shortcut key.
 ![](Editor/StoreDocument/Folders.png)
 
 
+Attach comment to Items
+---
+
+![](Editor/StoreDocument/SettingsAndFolders.png)
+
+
+Item Selection
+--- 
+
+![](Editor/StoreDocument/ItemSelection.gif)
+
 
 Usage
 --- 
