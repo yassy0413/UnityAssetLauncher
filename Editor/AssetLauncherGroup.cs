@@ -201,7 +201,14 @@ namespace AssetLauncher
                     }
 
                     m_ItemList.RemoveAt(list.selectedIndices.Count > 0 ? list.selectedIndices[0] : m_ItemList.Count - 1);
-                    SelectItem(-1);
+
+                    if (m_ItemList.Count <= 0)
+                    {
+                        SelectItem(-1);
+                        return;
+                    }
+
+                    SelectItem(Math.Clamp(list.selectedIndices[0] - 1, 0, m_ItemList.Count - 1));
                     OnModified.Invoke(this);
                 }
             };
