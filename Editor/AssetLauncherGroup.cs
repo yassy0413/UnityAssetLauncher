@@ -6,13 +6,14 @@ using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEditorInternal;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace AssetLauncher
 {
     [Serializable]
     public sealed class AssetLauncherGroup
     {
+        private const int kCommentSpace = 8;
+
         [SerializeField]
         private int m_Id;
 
@@ -34,6 +35,7 @@ namespace AssetLauncher
 
         public Action<AssetLauncherGroup> OnModified { get; set; }
         public Action<AssetLauncherGroup> OnModifiedName { get; set; }
+        public AssetLauncherWindow.Settings Settings { get; set; }
 
         public int Id
         {
@@ -62,7 +64,18 @@ namespace AssetLauncher
                 OnModifiedName.Invoke(this);
             }
 
-            UpdateFoldOutTargetList(EditorGUILayout.Foldout(m_FoldOut, "Target List"));
+            UpdateFoldOutTargetList(FoldOutWithMouseDown(m_FoldOut, "Target List"));
+            if (TryAcceptDropOnRect(GUILayoutUtility.GetLastRect(), out var paths))
+            {
+                foreach (var path in paths)
+                {
+                    m_ItemList.Add(new AssetLauncherItem
+                    {
+                        Asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path)
+                    });
+                }
+                OnModified.Invoke(this);
+            }
             if (m_FoldOut)
             {
                 SetupReorderableList();
@@ -74,19 +87,25 @@ namespace AssetLauncher
                 return;
             }
 
-            var selectItem = m_SelectIndex < 0 ? null : m_ItemList[m_SelectIndex];
-            var buttonLabel = new GUIContent(selectItem?.Name);
-            var buttonStyle = EditorStyles.popup;
-            var rect = GUILayoutUtility.GetRect(buttonLabel, buttonStyle);
-            if (GUI.Button(rect, buttonLabel, buttonStyle))
+            using (new GUILayout.HorizontalScope())
             {
-                new TargetDropdown(new AdvancedDropdownState())
+                var selectItem = m_SelectIndex < 0 ? null : m_ItemList[m_SelectIndex];
+                var buttonLabel = new GUIContent(selectItem?.Name);
+                var buttonStyle = EditorStyles.popup;
+
+                GUILayout.Label("Item Selection", GUILayout.Width(100));
+
+                var rect = GUILayoutUtility.GetRect(buttonLabel, buttonStyle);
+                if (GUI.Button(rect, buttonLabel, buttonStyle))
                 {
-                    OnItemSelected = SelectItem,
-                    QueryItemList = Enumerable.Range(0, m_ItemList.Count)
-                        .Where(x => m_ItemList[x] != null)
-                        .Select(x => (m_ItemList[x].Name, x))
-                }.Show(rect);
+                    new TargetDropdown(new AdvancedDropdownState())
+                    {
+                        OnItemSelected = SelectItem,
+                        QueryItemList = Enumerable.Range(0, m_ItemList.Count)
+                            .Where(x => m_ItemList[x] != null)
+                            .Select(x => (m_ItemList[x].Name, x))
+                    }.Show(rect);
+                }
             }
             
             GUILayout.Box(string.Empty, GUILayout.ExpandWidth(true), GUILayout.Height(4));
@@ -119,7 +138,7 @@ namespace AssetLauncher
                 return;
             }
             
-            var elementType = typeof(Object);
+            var elementType = typeof(UnityEngine.Object);
             
             m_ReorderableList = new ReorderableList(m_ItemList, elementType)
             {
@@ -133,14 +152,36 @@ namespace AssetLauncher
                     rect.height = EditorGUIUtility.singleLineHeight;
                     
                     var item = m_ItemList[index];
-                    var asset = EditorGUI.ObjectField(rect, item.Asset, elementType, false);
-                    if (ReferenceEquals(asset, item.Asset))
+                    var modified = false;
+
+                    using (new EditorGUILayout.HorizontalScope())
                     {
-                        return;
+                        var commentWidth = Settings.EnabledItemComment ? Settings.ItemCommentWidth : 0;
+
+                        var objectFieldRect = new Rect(rect.x, rect.y, rect.width - commentWidth - kCommentSpace, rect.height);
+                        var asset = EditorGUI.ObjectField(objectFieldRect, item.Asset, elementType, false);
+                        if (ReferenceEquals(asset, item.Asset))
+                        {
+                            item.Asset = asset;
+                            modified = true;
+                        }
+
+                        if (commentWidth > 0)
+                        {
+                            var commentRect = new Rect(rect.x + rect.width - commentWidth, rect.y, commentWidth, rect.height);
+                            var comment = EditorGUI.TextField(commentRect, item.Comment);
+                            if (comment != item.Comment)
+                            {
+                                item.Comment = comment;
+                                modified = true;
+                            }
+                        }
                     }
 
-                    item.Asset = asset;
-                    OnModified.Invoke(this);
+                    if (modified)
+                    {
+                        OnModified.Invoke(this);
+                    }
                 },
 
                 onSelectCallback = list =>
@@ -172,6 +213,56 @@ namespace AssetLauncher
             }
         }
 
+        public static bool FoldOutWithMouseDown(bool foldOut, string content)
+        {
+            var newFoldOut = EditorGUILayout.Foldout(foldOut, content);
+
+            if (newFoldOut != foldOut)
+            {
+                return newFoldOut;
+            }
+
+            var currentEvent = Event.current;
+
+            if (currentEvent.type == EventType.MouseDown)
+            {
+                if (GUILayoutUtility.GetLastRect().Contains(currentEvent.mousePosition))
+                {
+                    currentEvent.Use();
+                    return !foldOut;
+                }
+            }
+
+            return foldOut;
+        }
+
+        private static bool TryAcceptDropOnRect(Rect rect, out string[] paths)
+        {
+            var currentEvent = Event.current;
+
+            if (!rect.Contains(currentEvent.mousePosition))
+            {
+                paths = Array.Empty<string>();
+                return false;
+            }
+
+            switch (currentEvent.type)
+            {
+                case EventType.DragUpdated:
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+                    currentEvent.Use();
+                    break;
+                case EventType.DragPerform:
+                    paths = DragAndDrop.paths;
+                    DragAndDrop.AcceptDrag();
+                    currentEvent.Use();
+                    return true;
+            }
+
+            paths = Array.Empty<string>();
+            return false;
+        }
+
         private void UpdateFoldOutTargetList(bool on)
         {
             if (m_FoldOut == on)
@@ -188,7 +279,7 @@ namespace AssetLauncher
 
             if (m_SelectItemEditor != null)
             {
-                Object.DestroyImmediate(m_SelectItemEditor);
+                UnityEngine.Object.DestroyImmediate(m_SelectItemEditor);
                 m_SelectItemEditor = null;
             }
             
@@ -249,7 +340,7 @@ namespace AssetLauncher
             return Editor.CreateEditor(importer);
         }
 
-        private Object GetFirstContainsAsset(string path)
+        private UnityEngine.Object GetFirstContainsAsset(string path)
         {
             var dir = Directory
                 .GetDirectories(path, "*", SearchOption.TopDirectoryOnly)

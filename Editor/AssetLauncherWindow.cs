@@ -24,11 +24,15 @@ namespace AssetLauncher
         private static AssetLauncherWindow Instance { get; set; }
 
         [Serializable]
-        private sealed class Settings
+        public sealed class Settings
         {
             public List<int> GroupIdList = new();
             public int SelectGroupIndex;
-            public int xCount = 4;
+            public bool FoldOut;
+            public int GroupSelectionXCount = 4;
+            public int GroupSelectionHeight = 60;
+            public int ItemCommentWidth = 180;
+            public bool EnabledItemComment;
         }
 
         [Shortcut("AssetLauncher/Open Key", KeyCode.L, ShortcutModifiers.Control)]
@@ -63,16 +67,23 @@ namespace AssetLauncher
             m_SettingsPath = $"{dataPath}/settings.json";
             m_Settings = LoadJson<Settings>(m_SettingsPath);
 
-            m_GroupInstanceList = m_Settings.GroupIdList
-                .Select(x =>
-                {
-                    var path = GetGroupDataPath(x);
-                    return LoadJson<AssetLauncherGroup>(path);
-                })
-                .ToList();
-            
-            UpdateGroupNameList();
-            SelectGroup(m_Settings.SelectGroupIndex);
+            if (m_Settings.GroupIdList.Count <= 0)
+            {
+                AddGroup();
+            }
+            else
+            {
+                m_GroupInstanceList = m_Settings.GroupIdList
+                    .Select(x =>
+                    {
+                        var path = GetGroupDataPath(x);
+                        return LoadJson<AssetLauncherGroup>(path);
+                    })
+                    .ToList();
+
+                UpdateGroupNameList();
+                SelectGroup(m_Settings.SelectGroupIndex);
+            }
         }
 
         private void OnEnable()
@@ -81,6 +92,7 @@ namespace AssetLauncher
             {
                 group.OnModified = SaveGroup;
                 group.OnModifiedName = ModifiedGroupName;
+                group.Settings = m_Settings;
             }
         }
 
@@ -88,17 +100,55 @@ namespace AssetLauncher
 
         private void OnGUI()
         {
-            var xCount = EditorGUILayout.IntField("xCount", m_Settings.xCount, GUILayout.Width(200));
-            if (xCount > 0)
+            var settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
+            if (m_Settings.FoldOut != settingsFoldout)
             {
-                m_Settings.xCount = xCount;
+                m_Settings.FoldOut = settingsFoldout;
+                SaveSettings();
+            }
+            if (settingsFoldout)
+            {
+                using var _ = new EditorGUI.IndentLevelScope();
+
+                var labelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 200;
+
+                var xCount = EditorGUILayout.IntField("Group Selection xCount", m_Settings.GroupSelectionXCount);
+                if (xCount > 0 && xCount != m_Settings.GroupSelectionXCount)
+                {
+                    m_Settings.GroupSelectionXCount = xCount;
+                    SaveSettings();
+                }
+
+                var height = EditorGUILayout.IntField("Group Selection Height", m_Settings.GroupSelectionHeight);
+                if (height >= 32 && height != m_Settings.GroupSelectionHeight)
+                {
+                    m_Settings.GroupSelectionHeight = height;
+                    SaveSettings();
+                }
+
+                var enabledComment = EditorGUILayout.Toggle("Enable Item Comment", m_Settings.EnabledItemComment);
+                if (enabledComment != m_Settings.EnabledItemComment)
+                {
+                    m_Settings.EnabledItemComment = enabledComment;
+                    SaveSettings();
+                }
+
+                var commentWidth = EditorGUILayout.IntField("Item Comment Width", m_Settings.ItemCommentWidth);
+                if (commentWidth >= 60 && commentWidth != m_Settings.ItemCommentWidth)
+                {
+                    m_Settings.ItemCommentWidth = commentWidth;
+                    SaveSettings();
+                }
+
+                EditorGUIUtility.labelWidth = labelWidth;
             }
 
-            using (var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox, GUILayout.Height(EditorGUIUtility.singleLineHeight * 3)))
+            using (var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox, GUILayout.Height(m_Settings.GroupSelectionHeight)))
             {
                 m_ScrollPosition = scroll.scrollPosition;
 
-                var index = GUILayout.SelectionGrid(m_Settings.SelectGroupIndex, m_GroupNameList, m_Settings.xCount);
+                var index = GUILayout.SelectionGrid(m_Settings.SelectGroupIndex, m_GroupNameList, m_Settings.GroupSelectionXCount);
                 if (index != m_Settings.SelectGroupIndex)
                 {
                     SelectGroup(index);
@@ -145,7 +195,6 @@ namespace AssetLauncher
 
                 // Group id list
                 m_Settings.GroupIdList.Add(index);
-                SaveSettings();
 
                 // Group instance list
                 var group = new AssetLauncherGroup
@@ -161,6 +210,8 @@ namespace AssetLauncher
                 SaveGroup(group);
                 UpdateGroupNameList();
                 SelectGroup(m_GroupInstanceList.Count - 1);
+
+                SaveSettings();
                 return;
             }
         }
@@ -179,12 +230,13 @@ namespace AssetLauncher
 
             // Group instance list
             m_GroupInstanceList.RemoveAt(index);
-            SaveSettings();
             
             // Refresh
             File.Delete(GetGroupDataPath(id));
             UpdateGroupNameList();
             SelectGroup(m_Settings.SelectGroupIndex - 1);
+
+            SaveSettings();
         }
 
         private void SelectGroup(int index)
@@ -192,6 +244,7 @@ namespace AssetLauncher
             m_Settings.SelectGroupIndex = m_GroupInstanceList.Count > 0
                 ? Math.Clamp(index, 0, m_GroupInstanceList.Count - 1)
                 : 0;
+            GUI.FocusControl("");
         }
 
         private static T LoadJson<T>(string path) where T : new()
