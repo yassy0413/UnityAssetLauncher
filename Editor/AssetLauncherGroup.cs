@@ -160,7 +160,7 @@ namespace AssetLauncher
 
                         var objectFieldRect = new Rect(rect.x, rect.y, rect.width - commentWidth - kCommentSpace, rect.height);
                         var asset = EditorGUI.ObjectField(objectFieldRect, item.Asset, elementType, false);
-                        if (ReferenceEquals(asset, item.Asset))
+                        if (!ReferenceEquals(asset, item.Asset))
                         {
                             item.Asset = asset;
                             modified = true;
