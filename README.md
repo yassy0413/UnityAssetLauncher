@@ -45,3 +45,9 @@ UPM
 --- 
 **https://github.com/yassy0413/UnityAssetLauncher.git**
 
+You can install from Package Manager.
+
+![](Editor/StoreDocument/PackageManager01.png)
+
+![](Editor/StoreDocument/PackageManager02.png)
+
