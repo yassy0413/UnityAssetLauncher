@@ -69,6 +69,7 @@ namespace AssetLauncher
 
             if (m_Settings.GroupIdList.Count <= 0)
             {
+                m_GroupInstanceList = new List<AssetLauncherGroup>();
                 AddGroup();
             }
             else
