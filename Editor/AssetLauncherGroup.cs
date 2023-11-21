@@ -244,9 +244,8 @@ namespace AssetLauncher
                     else
                     {
                         m_ItemList.RemoveAt(m_ItemList.Count - 1);
+                        OnModified.Invoke(this);
                     }
-
-                    OnModified.Invoke(this);
                 }
             };
 
