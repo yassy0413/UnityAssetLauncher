@@ -13,6 +13,7 @@ namespace AssetLauncher
     public sealed class AssetLauncherGroup
     {
         private const int kCommentSpace = 8;
+        private const int kInvalidIndex = -1;
 
         [SerializeField]
         private int m_Id;
@@ -143,7 +144,7 @@ namespace AssetLauncher
             m_ReorderableList = new ReorderableList(m_ItemList, elementType)
             {
                 draggable = true,
-                multiSelect = false,
+                multiSelect = true,
                 elementHeightCallback = index => EditorGUIUtility.singleLineHeight,
                 headerHeight = 0,
 
@@ -186,7 +187,18 @@ namespace AssetLauncher
 
                 onSelectCallback = list =>
                 {
-                    SelectItem(list.selectedIndices[0]);
+                    if (list.selectedIndices.Count >= 1)
+                    {
+                        if (list.selectedIndices.Contains(m_SelectIndex))
+                        {
+                            return;
+                        }
+
+                        SelectItem(list.selectedIndices[0]);
+                        return;
+                    }
+
+                    DeSelectItem();
                 },
                 onAddCallback = list =>
                 {
@@ -200,15 +212,39 @@ namespace AssetLauncher
                         return;
                     }
 
-                    m_ItemList.RemoveAt(list.selectedIndices.Count > 0 ? list.selectedIndices[0] : m_ItemList.Count - 1);
-
-                    if (m_ItemList.Count <= 0)
+                    if (list.selectedIndices.Count > 1)
                     {
-                        SelectItem(-1);
-                        return;
+                        foreach (var index in list.selectedIndices.Reverse())
+                        {
+                            m_ItemList.RemoveAt(index);
+                        }
+                        DeSelectItem();
+                    }
+                    else if (list.selectedIndices.Count == 1)
+                    {
+                        m_ItemList.RemoveAt(list.selectedIndices[0]);
+                        do
+                        {
+                            if (m_ItemList.Count <= 0)
+                            {
+                                DeSelectItem();
+                                break;
+                            }
+
+                            var newIndex = list.selectedIndices[0] - 1;
+                            if (newIndex < 0)
+                            {
+                                DeSelectItem();
+                            }
+
+                            SelectItem(newIndex);
+                        } while (false);
+                    }
+                    else
+                    {
+                        m_ItemList.RemoveAt(m_ItemList.Count - 1);
                     }
 
-                    SelectItem(Math.Clamp(list.selectedIndices[0] - 1, 0, m_ItemList.Count - 1));
                     OnModified.Invoke(this);
                 }
             };
@@ -296,7 +332,14 @@ namespace AssetLauncher
             {
                 if (m_ReorderableList.index != m_SelectIndex)
                 {
-                    m_ReorderableList.index = m_SelectIndex;
+                    if (m_SelectIndex < 0)
+                    {
+                        m_ReorderableList.ClearSelection();
+                    }
+                    else
+                    {
+                        m_ReorderableList.index = m_SelectIndex;
+                    }
                 }
             }
             
@@ -339,6 +382,11 @@ namespace AssetLauncher
                     m_SelectItemEditor = Editor.CreateEditor(item.Asset);
                     break;
             }
+        }
+
+        private void DeSelectItem()
+        {
+            SelectItem(kInvalidIndex);
         }
 
         private static Editor CreateImporterEditor(string path) 

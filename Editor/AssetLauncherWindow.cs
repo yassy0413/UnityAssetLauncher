@@ -203,7 +203,8 @@ namespace AssetLauncher
                     Id = index,
                     GroupName = $"group{newGroupIndex}",
                     OnModified = SaveGroup,
-                    OnModifiedName = ModifiedGroupName
+                    OnModifiedName = ModifiedGroupName,
+                    Settings = m_Settings
                 };
                 m_GroupInstanceList.Add(group);
                 
