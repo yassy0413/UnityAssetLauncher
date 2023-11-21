@@ -235,6 +235,7 @@ namespace AssetLauncher
                             if (newIndex < 0)
                             {
                                 DeSelectItem();
+                                break;
                             }
 
                             SelectItem(newIndex);
