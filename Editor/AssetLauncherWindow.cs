@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.ShortcutManagement;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace AssetLauncher
 {
@@ -16,12 +17,16 @@ namespace AssetLauncher
         private Vector2 m_ScrollPosition;
         private GUIContent m_GuiContentPlus;
         private GUIContent m_GuiContentMinus;
+        private IMGUIContainer m_GroupSelectorPane;
+        private IMGUIContainer m_GroupInspectorPane;
 
         private string m_GroupPath;
         private string m_SettingsPath;
         private Settings m_Settings;
 
         private static AssetLauncherWindow Instance { get; set; }
+
+        private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
 
         [Serializable]
         public sealed class Settings
@@ -30,7 +35,7 @@ namespace AssetLauncher
             public int SelectGroupIndex;
             public bool FoldOut;
             public int GroupSelectionXCount = 4;
-            public int GroupSelectionHeight = 60;
+            public float GroupSelectionHeight = 60;
             public int ItemCommentWidth = 180;
             public bool EnabledItemComment;
         }
@@ -87,6 +92,17 @@ namespace AssetLauncher
             }
         }
 
+        private void CreateGUI()
+        {
+            rootVisualElement.Add(new IMGUIContainer(DrawHeader));
+
+            var pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
+            pane.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
+            pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+
+            rootVisualElement.Add(pane);
+        }
+
         private void OnEnable()
         {
             foreach (var group in m_GroupInstanceList)
@@ -97,9 +113,7 @@ namespace AssetLauncher
             }
         }
 
-        private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
-
-        private void OnGUI()
+        private void DrawHeader()
         {
             var settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
             if (m_Settings.FoldOut != settingsFoldout)
@@ -121,13 +135,6 @@ namespace AssetLauncher
                     SaveSettings();
                 }
 
-                var height = EditorGUILayout.IntField("Group Selection Height", m_Settings.GroupSelectionHeight);
-                if (height >= 32 && height != m_Settings.GroupSelectionHeight)
-                {
-                    m_Settings.GroupSelectionHeight = height;
-                    SaveSettings();
-                }
-
                 var enabledComment = EditorGUILayout.Toggle("Enable Item Comment", m_Settings.EnabledItemComment);
                 if (enabledComment != m_Settings.EnabledItemComment)
                 {
@@ -142,11 +149,31 @@ namespace AssetLauncher
                     SaveSettings();
                 }
 
+                GUILayout.Space(16);
+
                 EditorGUIUtility.labelWidth = labelWidth;
             }
+        }
 
-            using (var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox, GUILayout.Height(m_Settings.GroupSelectionHeight)))
+        private void DrawGroupSelector()
+        {
+            var contentRect = m_GroupSelectorPane.contentRect;
+            
+            if (m_Settings.GroupSelectionHeight != contentRect.height)
             {
+                m_Settings.GroupSelectionHeight = contentRect.height;
+                SaveSettings();
+            }
+
+            const float FooterHeight = 30f;
+
+            {
+                var rect = new Rect(contentRect.x, contentRect.y, contentRect.width, contentRect.height - FooterHeight);
+
+                using var _ = new GUILayout.AreaScope(rect);
+                using var scroll = new GUILayout.ScrollViewScope(
+                    m_ScrollPosition, EditorStyles.helpBox); // , GUILayout.Height(rect.height)
+
                 m_ScrollPosition = scroll.scrollPosition;
 
                 var index = GUILayout.SelectionGrid(m_Settings.SelectGroupIndex, m_GroupNameList, m_Settings.GroupSelectionXCount);
@@ -157,8 +184,12 @@ namespace AssetLauncher
                 }
             }
 
-            using (new GUILayout.HorizontalScope())
             {
+                var rect = new Rect(contentRect.x, contentRect.height - FooterHeight, contentRect.width, FooterHeight);
+
+                using var _ = new GUILayout.AreaScope(rect);
+                using var __ = new GUILayout.HorizontalScope();
+
                 GUILayout.FlexibleSpace();
 
                 if (GUILayout.Button(m_GuiContentPlus, GUILayout.ExpandWidth(false)))
@@ -170,12 +201,21 @@ namespace AssetLauncher
                 {
                     RemoveGroup(m_Settings.SelectGroupIndex);
                 }
+
+                GUILayout.Space(8);
+            }
+        }
+
+        private void DrawInspector()
+        {
+            if (m_GroupInstanceList.Count <= 0)
+            {
+                return;
             }
 
-            if (m_GroupInstanceList.Count > 0)
-            {
-                m_GroupInstanceList[m_Settings.SelectGroupIndex].OnInspectorGUI();
-            }
+            using var _ = new GUILayout.AreaScope(m_GroupInspectorPane.contentRect);
+
+            m_GroupInstanceList[m_Settings.SelectGroupIndex].OnInspectorGUI();
         }
 
         private void AddGroup()

@@ -4,8 +4,11 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
+using UnityEditor.Timeline;
 using UnityEditorInternal;
 using UnityEngine;
+using UnityEngine.Playables;
+using UnityEngine.Timeline;
 
 namespace AssetLauncher
 {
@@ -30,6 +33,7 @@ namespace AssetLauncher
         [SerializeField]
         private int m_SelectIndex;
 
+        private UnityEngine.Object m_SelectItemObject;
         private Editor m_SelectItemEditor;
         private ReorderableList m_ReorderableList;
         private Vector2 m_ScrollPosition;
@@ -58,6 +62,8 @@ namespace AssetLauncher
 
         private void DrawHeader()
         {
+            GUILayout.Space(8);
+
             var groupName = EditorGUILayout.TextField("Group Name", m_GroupName);
             if (groupName != m_GroupName)
             {
@@ -128,8 +134,36 @@ namespace AssetLauncher
             {
                 m_SelectItemEditor.DrawHeader();
             }
-            
+
+            if (m_SelectItemObject is TimelineAsset timelineAsset)
+            {
+                if (GUILayout.Button("Open Timeline Editor"))
+                {
+                    OpenTimelineEditor(timelineAsset);
+                }
+
+                GUILayout.Space(8);
+            }
+
             m_SelectItemEditor.OnInspectorGUI();
+        }
+
+        private void OpenTimelineEditor(TimelineAsset timelineAsset)
+        {
+            var window = TimelineEditor.GetOrCreateWindow();
+
+            if (window == null)
+            {
+                return;
+            }
+
+            window.SetTimeline(timelineAsset);
+            window.Show();
+
+            if (!window.hasFocus)
+            {
+                window.Focus();
+            }
         }
 
         private void SetupReorderableList()
@@ -320,6 +354,8 @@ namespace AssetLauncher
         {
             m_SelectIndex = index;
 
+            m_SelectItemObject = null;
+
             if (m_SelectItemEditor != null)
             {
                 UnityEngine.Object.DestroyImmediate(m_SelectItemEditor);
@@ -350,6 +386,8 @@ namespace AssetLauncher
 
             var item = m_ItemList[index];
             var path = AssetDatabase.GetAssetPath(item.Asset);
+
+            m_SelectItemObject = item.Asset;
 
             switch (item.Asset)
             {
