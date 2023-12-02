@@ -171,9 +171,8 @@ namespace AssetLauncher
                 var rect = new Rect(contentRect.x, contentRect.y, contentRect.width, contentRect.height - FooterHeight);
 
                 using var _ = new GUILayout.AreaScope(rect);
-                using var scroll = new GUILayout.ScrollViewScope(
-                    m_ScrollPosition, EditorStyles.helpBox); // , GUILayout.Height(rect.height)
 
+                using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox);
                 m_ScrollPosition = scroll.scrollPosition;
 
                 var index = GUILayout.SelectionGrid(m_Settings.SelectGroupIndex, m_GroupNameList, m_Settings.GroupSelectionXCount);
