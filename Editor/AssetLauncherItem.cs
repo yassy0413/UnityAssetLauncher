@@ -57,5 +57,6 @@ namespace AssetLauncher
         }
 
         public string Name => Asset == null ? string.Empty : Asset.name;
+        public string NameWithComment => string.IsNullOrEmpty(m_Comment) ? Name : $"{Name} ({m_Comment})";
     }
 }

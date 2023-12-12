@@ -7,7 +7,6 @@ using UnityEditor.IMGUI.Controls;
 using UnityEditor.Timeline;
 using UnityEditorInternal;
 using UnityEngine;
-using UnityEngine.Playables;
 using UnityEngine.Timeline;
 
 namespace AssetLauncher
@@ -33,14 +32,24 @@ namespace AssetLauncher
         [SerializeField]
         private int m_SelectIndex;
 
+        [SerializeField]
+        private Color m_FontColor = Color.white;
+        
+        [SerializeField]
+        private Color m_BackgroundColor = Color.white;
+
         private UnityEngine.Object m_SelectItemObject;
-        private Editor m_SelectItemEditor;
         private ReorderableList m_ReorderableList;
         private Vector2 m_ScrollPosition;
+        private GUILayoutOption m_ColorGuiWidth;
 
         public Action<AssetLauncherGroup> OnModified { get; set; }
         public Action<AssetLauncherGroup> OnModifiedName { get; set; }
         public AssetLauncherWindow.Settings Settings { get; set; }
+        
+        public AssetLauncherWindow.Shared Shared { get; set; }
+        public Color FontColor => m_FontColor;
+        public Color BackgroundColor => m_BackgroundColor;
 
         public int Id
         {
@@ -63,12 +72,19 @@ namespace AssetLauncher
         private void DrawHeader()
         {
             GUILayout.Space(8);
-
-            var groupName = EditorGUILayout.TextField("Group Name", m_GroupName);
-            if (groupName != m_GroupName)
+            
+            using (new GUILayout.HorizontalScope())
             {
-                m_GroupName = groupName;
-                OnModifiedName.Invoke(this);
+                var groupName = EditorGUILayout.TextField("Group Name", m_GroupName);
+                if (groupName != m_GroupName)
+                {
+                    m_GroupName = groupName;
+                    OnModifiedName.Invoke(this);
+                }
+
+                m_ColorGuiWidth ??= GUILayout.Width(40);
+                m_FontColor = EditorGUILayout.ColorField(string.Empty, m_FontColor, m_ColorGuiWidth);
+                m_BackgroundColor = EditorGUILayout.ColorField(string.Empty, m_BackgroundColor, m_ColorGuiWidth);
             }
 
             UpdateFoldOutTargetList(FoldOutWithMouseDown(m_FoldOut, "Target List"));
@@ -97,7 +113,7 @@ namespace AssetLauncher
             using (new GUILayout.HorizontalScope())
             {
                 var selectItem = m_SelectIndex < 0 ? null : m_ItemList[m_SelectIndex];
-                var buttonLabel = new GUIContent(selectItem?.Name);
+                var buttonLabel = new GUIContent(selectItem?.NameWithComment);
                 var buttonStyle = EditorStyles.popup;
 
                 GUILayout.Label("Item Selection", GUILayout.Width(100));
@@ -110,7 +126,7 @@ namespace AssetLauncher
                         OnItemSelected = SelectItem,
                         QueryItemList = Enumerable.Range(0, m_ItemList.Count)
                             .Where(x => m_ItemList[x] != null)
-                            .Select(x => (m_ItemList[x].Name, x))
+                            .Select(x => (m_ItemList[x].NameWithComment, x))
                     }.Show(rect);
                 }
             }
@@ -123,16 +139,16 @@ namespace AssetLauncher
             using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition);
             m_ScrollPosition = scroll.scrollPosition;
 
-            if (m_SelectItemEditor == null)
+            if (Shared.Editor == null || m_SelectIndex < 0 || m_SelectIndex >= m_ItemList.Count)
             {
                 return;
             }
             
             using var _ = new EditorGUILayout.VerticalScope();
             
-            if (m_SelectItemEditor is MaterialEditor) 
+            if (Shared.Editor is MaterialEditor) 
             {
-                m_SelectItemEditor.DrawHeader();
+                Shared.Editor.DrawHeader();
             }
 
             if (m_SelectItemObject is TimelineAsset timelineAsset)
@@ -145,7 +161,7 @@ namespace AssetLauncher
                 GUILayout.Space(8);
             }
 
-            m_SelectItemEditor.OnInspectorGUI();
+            Shared.Editor.OnInspectorGUI();
         }
 
         private void OpenTimelineEditor(TimelineAsset timelineAsset)
@@ -192,8 +208,9 @@ namespace AssetLauncher
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         var commentWidth = Settings.EnabledItemComment ? Settings.ItemCommentWidth : 0;
+                        var commentSpace = Settings.EnabledItemComment ? kCommentSpace : 0;
 
-                        var objectFieldRect = new Rect(rect.x, rect.y, rect.width - commentWidth - kCommentSpace, rect.height);
+                        var objectFieldRect = new Rect(rect.x, rect.y, rect.width - commentWidth - commentSpace, rect.height);
                         var asset = EditorGUI.ObjectField(objectFieldRect, item.Asset, elementType, false);
                         if (!ReferenceEquals(asset, item.Asset))
                         {
@@ -329,6 +346,7 @@ namespace AssetLauncher
                     DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
                     currentEvent.Use();
                     break;
+                
                 case EventType.DragPerform:
                     paths = DragAndDrop.paths;
                     DragAndDrop.AcceptDrag();
@@ -350,18 +368,61 @@ namespace AssetLauncher
             OnModified.Invoke(this);
         }
 
+        public void RefreshEditor()
+        {
+            if (m_SelectIndex < 0 || m_SelectIndex >= m_ItemList.Count)
+            {
+                return;
+            }
+            
+            var item = m_ItemList[m_SelectIndex];
+            var path = AssetDatabase.GetAssetPath(item.Asset);
+            var requiredImporterEditor = false;
+            
+            switch (item.Asset)
+            {
+                case DefaultAsset:
+                    if (!AssetDatabase.IsValidFolder(path))
+                    {
+                        break;
+                    }
+
+                    var asset = GetFirstContainsAsset(path);
+                    if (asset != null)
+                    {
+                        EditorGUIUtility.PingObject(asset);
+                    }
+                    break;
+                
+                case GameObject:
+                    if (path.EndsWith(".prefab"))
+                    {// We can not create Prefab Importer Editor.
+                        break;
+                    }
+                    requiredImporterEditor = true;
+                    break;
+                
+                case Texture2D:
+                    requiredImporterEditor = true;
+                    break;
+            }
+
+            if (requiredImporterEditor)
+            {
+                Shared.SetImporterEditor(path);
+            }
+            else
+            {
+                Shared.SetEditor(item.Asset);
+            }
+        }
+
         private void SelectItem(int index)
         {
             m_SelectIndex = index;
 
             m_SelectItemObject = null;
 
-            if (m_SelectItemEditor != null)
-            {
-                UnityEngine.Object.DestroyImmediate(m_SelectItemEditor);
-                m_SelectItemEditor = null;
-            }
-            
             OnModified.Invoke(this);
 
             if (m_ReorderableList != null)
@@ -383,54 +444,14 @@ namespace AssetLauncher
             {
                 return;
             }
-
-            var item = m_ItemList[index];
-            var path = AssetDatabase.GetAssetPath(item.Asset);
-
-            m_SelectItemObject = item.Asset;
-
-            switch (item.Asset)
-            {
-                case DefaultAsset:
-                    if (!AssetDatabase.IsValidFolder(path))
-                    {
-                        break;
-                    }
-
-                    var asset = GetFirstContainsAsset(path);
-                    if (asset != null)
-                    {
-                        EditorGUIUtility.PingObject(asset);
-                    }
-                    break;
-                
-                case GameObject:
-                    if (path.EndsWith(".prefab"))
-                    {
-                        break;
-                    }
-                    m_SelectItemEditor = CreateImporterEditor(path);
-                    break;
-                
-                case Texture2D:
-                    m_SelectItemEditor = CreateImporterEditor(path);
-                    break;
-                
-                default:
-                    m_SelectItemEditor = Editor.CreateEditor(item.Asset);
-                    break;
-            }
+            
+            m_SelectItemObject = m_ItemList[index].Asset;
+            RefreshEditor();
         }
 
         private void DeSelectItem()
         {
             SelectItem(kInvalidIndex);
-        }
-
-        private static Editor CreateImporterEditor(string path) 
-        {
-            var importer = AssetImporter.GetAtPath(path);
-            return Editor.CreateEditor(importer);
         }
 
         private UnityEngine.Object GetFirstContainsAsset(string path)

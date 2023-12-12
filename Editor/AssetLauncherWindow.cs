@@ -7,23 +7,27 @@ using UnityEditor;
 using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 
 namespace AssetLauncher
 {
     public sealed class AssetLauncherWindow : EditorWindow
     {
         private List<AssetLauncherGroup> m_GroupInstanceList;
-        private string[] m_GroupNameList = Array.Empty<string>();
         private Vector2 m_ScrollPosition;
         private GUIContent m_GuiContentPlus;
         private GUIContent m_GuiContentMinus;
+        private GUIStyle m_GuiStyleGroup;
+        private GUIStyle m_GuiStyleGroupBold;
         private IMGUIContainer m_GroupSelectorPane;
         private IMGUIContainer m_GroupInspectorPane;
+        private Editor m_SharedEditor;
 
         private string m_GroupPath;
         private string m_SettingsPath;
         private Settings m_Settings;
-
+        private Shared m_Shared = new();
+        
         private static AssetLauncherWindow Instance { get; set; }
 
         private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
@@ -35,9 +39,21 @@ namespace AssetLauncher
             public int SelectGroupIndex;
             public bool FoldOut;
             public int GroupSelectionXCount = 4;
-            public float GroupSelectionHeight = 60;
+            public int GroupSelectionHeight = 60;
             public int ItemCommentWidth = 180;
             public bool EnabledItemComment;
+        }
+        
+        public sealed class Shared
+        {
+            private Editor m_Editor;
+            public Editor Editor => m_Editor;
+
+            public void SetEditor(Object targetObject) =>
+                Editor.CreateCachedEditor(targetObject, null, ref m_Editor);
+
+            public void SetImporterEditor(string path) =>
+                Editor.CreateCachedEditor(AssetImporter.GetAtPath(path), null, ref m_Editor);
         }
 
         [Shortcut("AssetLauncher/Open Key", KeyCode.L, ShortcutModifiers.Control)]
@@ -60,6 +76,8 @@ namespace AssetLauncher
         {
             m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
             m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
+            m_GuiStyleGroup = new GUIStyle(GUI.skin.button);
+            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button) {fontStyle = FontStyle.Bold, fontSize = 13};
 
             var dataPath = Path.Join(Application.persistentDataPath, "AssetLauncher");
             m_GroupPath = $"{dataPath}/group";
@@ -83,11 +101,12 @@ namespace AssetLauncher
                     .Select(x =>
                     {
                         var path = GetGroupDataPath(x);
-                        return LoadJson<AssetLauncherGroup>(path);
+                        var group = LoadJson<AssetLauncherGroup>(path);
+                        group.Shared = m_Shared;
+                        return group;
                     })
                     .ToList();
-
-                UpdateGroupNameList();
+                
                 SelectGroup(m_Settings.SelectGroupIndex);
             }
         }
@@ -110,6 +129,7 @@ namespace AssetLauncher
                 group.OnModified = SaveGroup;
                 group.OnModifiedName = ModifiedGroupName;
                 group.Settings = m_Settings;
+                group.Shared = m_Shared;
             }
         }
 
@@ -159,9 +179,9 @@ namespace AssetLauncher
         {
             var contentRect = m_GroupSelectorPane.contentRect;
             
-            if (m_Settings.GroupSelectionHeight != contentRect.height)
+            if (m_Settings.GroupSelectionHeight != (int)contentRect.height)
             {
-                m_Settings.GroupSelectionHeight = contentRect.height;
+                m_Settings.GroupSelectionHeight = (int)contentRect.height;
                 SaveSettings();
             }
 
@@ -174,8 +194,8 @@ namespace AssetLauncher
 
                 using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox);
                 m_ScrollPosition = scroll.scrollPosition;
-
-                var index = GUILayout.SelectionGrid(m_Settings.SelectGroupIndex, m_GroupNameList, m_Settings.GroupSelectionXCount);
+                
+                var index = DrawGroupSelectionGrid(m_Settings.SelectGroupIndex, rect.width - 24);
                 if (index != m_Settings.SelectGroupIndex)
                 {
                     SelectGroup(index);
@@ -217,6 +237,39 @@ namespace AssetLauncher
             m_GroupInstanceList[m_Settings.SelectGroupIndex].OnInspectorGUI();
         }
 
+        private int DrawGroupSelectionGrid(int selected, float width)
+        {
+            var guiWidth = GUILayout.Width(width / m_Settings.GroupSelectionXCount);
+            var contentColor = GUI.contentColor;
+            var backgroundColor = GUI.backgroundColor;
+
+            GUILayout.BeginHorizontal();
+            var groupCount = m_GroupInstanceList.Count;
+            for (var index = 0; index < groupCount; ++index)
+            {
+                if (index > 0 && index % m_Settings.GroupSelectionXCount == 0)
+                {
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                }
+
+                var group = m_GroupInstanceList[index];
+                
+                GUI.contentColor = group.FontColor;
+                GUI.backgroundColor = group.BackgroundColor;
+
+                if (GUILayout.Button(group.GroupName, selected == index? m_GuiStyleGroupBold : m_GuiStyleGroup, guiWidth))
+                {
+                    selected = index;
+                }
+            }
+            GUILayout.EndHorizontal();
+            
+            GUI.contentColor = contentColor;
+            GUI.backgroundColor = backgroundColor;
+            return selected;
+        }
+
         private void AddGroup()
         {
             for (var index = 0;; ++index)
@@ -227,7 +280,8 @@ namespace AssetLauncher
                 }
 
                 // Group index
-                var newGroupIndex = m_GroupNameList
+                var newGroupIndex = m_GroupInstanceList
+                    .Select(x => x.GroupName)
                     .Select(x => Regex.Replace(x, "group(\\d+)", "$1"))
                     .Select(x => int.TryParse(x, out var v) ? v : 0)
                     .DefaultIfEmpty()
@@ -243,13 +297,13 @@ namespace AssetLauncher
                     GroupName = $"group{newGroupIndex}",
                     OnModified = SaveGroup,
                     OnModifiedName = ModifiedGroupName,
-                    Settings = m_Settings
+                    Settings = m_Settings,
+                    Shared = m_Shared,
                 };
                 m_GroupInstanceList.Add(group);
                 
                 // Refresh
                 SaveGroup(group);
-                UpdateGroupNameList();
                 SelectGroup(m_GroupInstanceList.Count - 1);
 
                 SaveSettings();
@@ -274,7 +328,6 @@ namespace AssetLauncher
             
             // Refresh
             File.Delete(GetGroupDataPath(id));
-            UpdateGroupNameList();
             SelectGroup(m_Settings.SelectGroupIndex - 1);
 
             SaveSettings();
@@ -285,7 +338,13 @@ namespace AssetLauncher
             m_Settings.SelectGroupIndex = m_GroupInstanceList.Count > 0
                 ? Math.Clamp(index, 0, m_GroupInstanceList.Count - 1)
                 : 0;
+            
             GUI.FocusControl("");
+            
+            if (m_Settings.SelectGroupIndex < m_GroupInstanceList.Count)
+            {
+                m_GroupInstanceList[m_Settings.SelectGroupIndex].RefreshEditor();   
+            }
         }
 
         private static T LoadJson<T>(string path) where T : new()
@@ -328,12 +387,6 @@ namespace AssetLauncher
         private void ModifiedGroupName(AssetLauncherGroup group)
         {
             SaveGroup(group);
-            UpdateGroupNameList();
-        }
-        
-        private void UpdateGroupNameList()
-        {
-            m_GroupNameList = m_GroupInstanceList.Select(x => x.GroupName).ToArray();
         }
     }
 }
