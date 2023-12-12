@@ -83,8 +83,20 @@ namespace AssetLauncher
                 }
 
                 m_ColorGuiWidth ??= GUILayout.Width(40);
-                m_FontColor = EditorGUILayout.ColorField(string.Empty, m_FontColor, m_ColorGuiWidth);
-                m_BackgroundColor = EditorGUILayout.ColorField(string.Empty, m_BackgroundColor, m_ColorGuiWidth);
+
+                var fontColor = EditorGUILayout.ColorField(string.Empty, m_FontColor, m_ColorGuiWidth);
+                if (fontColor != m_FontColor)
+                {
+                    m_FontColor = fontColor;
+                    OnModified.Invoke(this);
+                }
+
+                var backgroundColor = EditorGUILayout.ColorField(string.Empty, m_BackgroundColor, m_ColorGuiWidth);
+                if (backgroundColor != m_BackgroundColor)
+                {
+                    m_BackgroundColor = backgroundColor;
+                    OnModified.Invoke(this);
+                }
             }
 
             UpdateFoldOutTargetList(FoldOutWithMouseDown(m_FoldOut, "Target List"));
