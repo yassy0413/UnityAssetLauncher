@@ -63,13 +63,12 @@ namespace AssetLauncher
             set => m_GroupName = value;
         }
 
-        public void OnInspectorGUI()
-        {
-            DrawHeader();
-            DrawBody();
-        }
+        private AssetLauncherItem CurrentItem =>
+            m_SelectIndex >= 0 && m_SelectIndex < m_ItemList.Count
+                ? m_ItemList[m_SelectIndex]
+                : null;
 
-        private void DrawHeader()
+        public void DrawHeader()
         {
             GUILayout.Space(8);
             
@@ -116,16 +115,15 @@ namespace AssetLauncher
                 SetupReorderableList();
                 m_ReorderableList.DoLayoutList();
             }
+        }
 
-            if (m_ItemList.Count <= 0)
-            {
-                return;
-            }
+        public void DrawBody()
+        {
+            var currentItem = CurrentItem;
 
             using (new GUILayout.HorizontalScope())
             {
-                var selectItem = m_SelectIndex < 0 ? null : m_ItemList[m_SelectIndex];
-                var buttonLabel = new GUIContent(selectItem?.NameWithComment);
+                var buttonLabel = new GUIContent(currentItem?.NameWithComment);
                 var buttonStyle = EditorStyles.popup;
 
                 GUILayout.Label("Item Selection", GUILayout.Width(100));
@@ -142,16 +140,13 @@ namespace AssetLauncher
                     }.Show(rect);
                 }
             }
-            
-            GUILayout.Box(string.Empty, GUILayout.ExpandWidth(true), GUILayout.Height(4));
-        }
 
-        private void DrawBody()
-        {
+            GUILayout.Box(string.Empty, GUILayout.ExpandWidth(true), GUILayout.Height(4));
+
             using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition);
             m_ScrollPosition = scroll.scrollPosition;
 
-            if (Shared.Editor == null || m_SelectIndex < 0 || m_SelectIndex >= m_ItemList.Count)
+            if (Shared.Editor == null || currentItem == null)
             {
                 return;
             }
@@ -382,16 +377,16 @@ namespace AssetLauncher
 
         public void RefreshEditor()
         {
-            if (m_SelectIndex < 0 || m_SelectIndex >= m_ItemList.Count)
+            var currentItem = CurrentItem;
+            if (currentItem == null)
             {
                 return;
             }
-            
-            var item = m_ItemList[m_SelectIndex];
-            var path = AssetDatabase.GetAssetPath(item.Asset);
+
+            var path = AssetDatabase.GetAssetPath(currentItem.Asset);
             var requiredImporterEditor = false;
             
-            switch (item.Asset)
+            switch (currentItem.Asset)
             {
                 case DefaultAsset:
                     if (!AssetDatabase.IsValidFolder(path))
@@ -425,7 +420,7 @@ namespace AssetLauncher
             }
             else
             {
-                Shared.SetEditor(item.Asset);
+                Shared.SetEditor(currentItem.Asset);
             }
         }
 

@@ -21,12 +21,12 @@ namespace AssetLauncher
         private GUIStyle m_GuiStyleGroupBold;
         private IMGUIContainer m_GroupSelectorPane;
         private IMGUIContainer m_GroupInspectorPane;
-        private Editor m_SharedEditor;
+        private IMGUIContainer m_GroupTargetListPane;
 
         private string m_GroupPath;
         private string m_SettingsPath;
         private Settings m_Settings;
-        private Shared m_Shared = new();
+        private readonly Shared m_Shared = new();
         
         private static AssetLauncherWindow Instance { get; set; }
 
@@ -39,9 +39,11 @@ namespace AssetLauncher
             public int SelectGroupIndex;
             public bool FoldOut;
             public int GroupSelectionXCount = 4;
+            public int GroupSelectionWidth = 300;
             public int GroupSelectionHeight = 60;
             public int ItemCommentWidth = 180;
             public bool EnabledItemComment;
+            public Layout Layout = Layout.Vertical;
         }
         
         public sealed class Shared
@@ -54,6 +56,12 @@ namespace AssetLauncher
 
             public void SetImporterEditor(string path) =>
                 Editor.CreateCachedEditor(AssetImporter.GetAtPath(path), null, ref m_Editor);
+        }
+
+        public enum Layout
+        {
+            Vertical,
+            Horizontal,
         }
 
         [Shortcut("AssetLauncher/Open Key", KeyCode.L, ShortcutModifiers.Control)]
@@ -72,12 +80,25 @@ namespace AssetLauncher
             Instance = null;
         }
 
-        private void Awake()
+        private void OnEnable()
         {
-            m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
-            m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
-            m_GuiStyleGroup = new GUIStyle(GUI.skin.button);
-            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button) {fontStyle = FontStyle.Bold, fontSize = 13};
+            Setup();
+
+            foreach (var group in m_GroupInstanceList)
+            {
+                group.OnModified = SaveGroup;
+                group.OnModifiedName = ModifiedGroupName;
+                group.Settings = m_Settings;
+                group.Shared = m_Shared;
+            }
+        }
+
+        private void Setup()
+        {
+            if (m_GroupInstanceList != null)
+            {
+                return;
+            }
 
             var dataPath = Path.Join(Application.persistentDataPath, "AssetLauncher");
             m_GroupPath = $"{dataPath}/group";
@@ -106,35 +127,47 @@ namespace AssetLauncher
                         return group;
                     })
                     .ToList();
-                
+
                 SelectGroup(m_Settings.SelectGroupIndex);
             }
         }
 
+        private AssetLauncherGroup CurrentGroup =>
+            m_Settings.SelectGroupIndex >= 0 && m_Settings.SelectGroupIndex < m_GroupInstanceList.Count
+                ? m_GroupInstanceList[m_Settings.SelectGroupIndex]
+                : null;
+
         private void CreateGUI()
         {
+            rootVisualElement.Clear();
+
             rootVisualElement.Add(new IMGUIContainer(DrawHeader));
 
-            var pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
-            pane.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
-            pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+            VisualElement pane;
+            if (m_Settings.Layout == Layout.Vertical)
+            {
+                pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
+                pane.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
+                pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+            }
+            else
+            {
+                var paneV = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
+                paneV.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
+                paneV.Add(m_GroupTargetListPane = new IMGUIContainer(DrawTargetList));
+
+                pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionWidth, TwoPaneSplitViewOrientation.Horizontal);
+                pane.Add(paneV);
+                pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+            }
 
             rootVisualElement.Add(pane);
         }
 
-        private void OnEnable()
-        {
-            foreach (var group in m_GroupInstanceList)
-            {
-                group.OnModified = SaveGroup;
-                group.OnModifiedName = ModifiedGroupName;
-                group.Settings = m_Settings;
-                group.Shared = m_Shared;
-            }
-        }
-
         private void DrawHeader()
         {
+            InitializeGuiStyles();
+
             var settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
             if (m_Settings.FoldOut != settingsFoldout)
             {
@@ -169,6 +202,14 @@ namespace AssetLauncher
                     SaveSettings();
                 }
 
+                var layout = (Layout)EditorGUILayout.EnumPopup("Layout", m_Settings.Layout);
+                if (layout != m_Settings.Layout)
+                {
+                    m_Settings.Layout = layout;
+                    SaveSettings();
+                    CreateGUI();
+                }
+
                 GUILayout.Space(16);
 
                 EditorGUIUtility.labelWidth = labelWidth;
@@ -178,7 +219,7 @@ namespace AssetLauncher
         private void DrawGroupSelector()
         {
             var contentRect = m_GroupSelectorPane.contentRect;
-            
+
             if (m_Settings.GroupSelectionHeight != (int)contentRect.height)
             {
                 m_Settings.GroupSelectionHeight = (int)contentRect.height;
@@ -225,6 +266,19 @@ namespace AssetLauncher
             }
         }
 
+        private void DrawTargetList()
+        {
+            var contentRect = m_GroupTargetListPane.contentRect;
+
+            if (m_Settings.GroupSelectionWidth != (int)contentRect.width)
+            {
+                m_Settings.GroupSelectionWidth = (int)contentRect.width;
+                SaveSettings();
+            }
+
+            CurrentGroup?.DrawHeader();
+        }
+
         private void DrawInspector()
         {
             if (m_GroupInstanceList.Count <= 0)
@@ -234,7 +288,14 @@ namespace AssetLauncher
 
             using var _ = new GUILayout.AreaScope(m_GroupInspectorPane.contentRect);
 
-            m_GroupInstanceList[m_Settings.SelectGroupIndex].OnInspectorGUI();
+            var currentGroup = CurrentGroup;
+
+            if (m_Settings.Layout == Layout.Vertical)
+            {
+                currentGroup?.DrawHeader();
+            }
+
+            currentGroup?.DrawBody();
         }
 
         private int DrawGroupSelectionGrid(int selected, float width)
@@ -340,11 +401,7 @@ namespace AssetLauncher
                 : 0;
             
             GUI.FocusControl("");
-            
-            if (m_Settings.SelectGroupIndex < m_GroupInstanceList.Count)
-            {
-                m_GroupInstanceList[m_Settings.SelectGroupIndex].RefreshEditor();   
-            }
+            CurrentGroup?.RefreshEditor();
         }
 
         private static T LoadJson<T>(string path) where T : new()
@@ -387,6 +444,19 @@ namespace AssetLauncher
         private void ModifiedGroupName(AssetLauncherGroup group)
         {
             SaveGroup(group);
+        }
+
+        private void InitializeGuiStyles()
+        {
+            if (m_GuiContentPlus != null)
+            {
+                return;
+            }
+
+            m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
+            m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
+            m_GuiStyleGroup = new GUIStyle(GUI.skin.button);
+            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, fontSize = 13 };
         }
     }
 }
