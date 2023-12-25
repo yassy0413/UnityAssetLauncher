@@ -32,6 +32,13 @@ namespace AssetLauncher
 
         private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
 
+        public enum ButtonTextAnchor
+        {
+            Left,
+            Center,
+            Right,
+        }
+
         [Serializable]
         public sealed class Settings
         {
@@ -43,6 +50,7 @@ namespace AssetLauncher
             public int GroupSelectionHeight = 60;
             public int ItemCommentWidth = 180;
             public bool EnabledItemComment;
+            public ButtonTextAnchor ButtonTextAnchor = ButtonTextAnchor.Center;
             public Layout Layout = Layout.Vertical;
         }
         
@@ -200,6 +208,14 @@ namespace AssetLauncher
                 {
                     m_Settings.ItemCommentWidth = commentWidth;
                     SaveSettings();
+                }
+
+                var buttonTextAnchor = (ButtonTextAnchor)EditorGUILayout.EnumPopup("Button Text Anchor", m_Settings.ButtonTextAnchor);
+                if (buttonTextAnchor != m_Settings.ButtonTextAnchor)
+                {
+                    m_Settings.ButtonTextAnchor = buttonTextAnchor;
+                    SaveSettings();
+                    ResetGuiStyles();
                 }
 
                 var layout = (Layout)EditorGUILayout.EnumPopup("Layout", m_Settings.Layout);
@@ -453,10 +469,30 @@ namespace AssetLauncher
                 return;
             }
 
+            var buttonTextAnchor = m_Settings.ButtonTextAnchor switch
+            {
+                ButtonTextAnchor.Left => TextAnchor.MiddleLeft,
+                ButtonTextAnchor.Center => TextAnchor.MiddleCenter,
+                _ => TextAnchor.MiddleRight
+            };
+
             m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
             m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
-            m_GuiStyleGroup = new GUIStyle(GUI.skin.button);
-            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, fontSize = 13 };
+            m_GuiStyleGroup = new GUIStyle(GUI.skin.button)
+            {
+                alignment = buttonTextAnchor
+            };
+            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button)
+            {
+                alignment = buttonTextAnchor,
+                fontStyle = FontStyle.Bold,
+                fontSize = 13
+            };
+        }
+
+        private void ResetGuiStyles()
+        {
+            m_GuiContentPlus = null;
         }
     }
 }
