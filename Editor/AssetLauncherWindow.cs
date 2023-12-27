@@ -7,6 +7,7 @@ using UnityEditor;
 using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEngine.InputSystem;
 using Object = UnityEngine.Object;
 
 namespace AssetLauncher
@@ -101,6 +102,16 @@ namespace AssetLauncher
             }
         }
 
+        private void Update()
+        {
+            if (m_GroupInstanceList?.Count <= 0)
+            {
+                return;
+            }
+
+            ProcessShortcutKey();
+        }
+
         private void Setup()
         {
             if (m_GroupInstanceList != null)
@@ -137,6 +148,11 @@ namespace AssetLauncher
                     .ToList();
 
                 SelectGroup(m_Settings.SelectGroupIndex);
+            }
+
+            if (m_Settings.GroupSelectionHeight < 64)
+            {
+                m_Settings.GroupSelectionHeight = 64;
             }
         }
 
@@ -175,7 +191,7 @@ namespace AssetLauncher
         private void DrawHeader()
         {
             InitializeGuiStyles();
-
+            
             var settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
             if (m_Settings.FoldOut != settingsFoldout)
             {
@@ -493,6 +509,46 @@ namespace AssetLauncher
         private void ResetGuiStyles()
         {
             m_GuiContentPlus = null;
+        }
+
+        private void ProcessShortcutKey()
+        {
+            var keyboard = Keyboard.current;
+
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (!keyboard.ctrlKey.isPressed)
+            {
+                return;
+            }
+
+            var count = m_GroupInstanceList.Count;
+            
+            for (var index = 0; index < count; ++index)
+            {
+                if (index == m_Settings.SelectGroupIndex)
+                {
+                    continue;
+                }
+
+                var group = m_GroupInstanceList[index];
+
+                if (group.ShortcutKey == AssetLauncherShortcutKey.None)
+                {
+                    continue;
+                }
+
+                if (keyboard[(Key)group.ShortcutKey].isPressed)
+                {
+                    SelectGroup(index);
+                    SaveSettings();
+                    Repaint();
+                    return;
+                }
+            }
         }
     }
 }

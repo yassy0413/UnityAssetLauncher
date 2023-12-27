@@ -8,6 +8,7 @@ using UnityEditor.Timeline;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Timeline;
+using UnityEngine.InputSystem;
 
 namespace AssetLauncher
 {
@@ -22,6 +23,9 @@ namespace AssetLauncher
 
         [SerializeField]
         private string m_GroupName;
+
+        [SerializeField]
+        private AssetLauncherShortcutKey m_ShortcutKey = AssetLauncherShortcutKey.None;
 
         [SerializeField]
         private List<AssetLauncherItem> m_ItemList = new();
@@ -63,6 +67,9 @@ namespace AssetLauncher
             set => m_GroupName = value;
         }
 
+        public AssetLauncherShortcutKey ShortcutKey =>
+            m_ShortcutKey;
+
         private AssetLauncherItem CurrentItem =>
             m_SelectIndex >= 0 && m_SelectIndex < m_ItemList.Count
                 ? m_ItemList[m_SelectIndex]
@@ -95,6 +102,16 @@ namespace AssetLauncher
                 {
                     m_BackgroundColor = backgroundColor;
                     OnModified.Invoke(this);
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(Keyboard.current == null))
+            {
+                var shortcutKeyCode = (AssetLauncherShortcutKey)EditorGUILayout.EnumPopup("Shortcut Key (Ctrl+)", m_ShortcutKey);
+                if (shortcutKeyCode != m_ShortcutKey)
+                {
+                    m_ShortcutKey = shortcutKeyCode;
+                    OnModifiedName.Invoke(this);
                 }
             }
 

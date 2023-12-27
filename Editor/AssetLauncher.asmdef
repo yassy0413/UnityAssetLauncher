@@ -3,7 +3,8 @@
     "rootNamespace": "AssetLauncher",
     "references": [
         "GUID:f06555f75b070af458a003d92f9efb00",
-        "GUID:02f771204943f4a40949438e873e3eff"
+        "GUID:02f771204943f4a40949438e873e3eff",
+        "GUID:75469ad4d38634e559750d17036d5f7c"
     ],
     "includePlatforms": [
         "Editor"
