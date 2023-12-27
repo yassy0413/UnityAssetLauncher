@@ -8,7 +8,10 @@ using UnityEditor.Timeline;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Timeline;
+
+#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
+#endif
 
 namespace AssetLauncher
 {
@@ -24,8 +27,10 @@ namespace AssetLauncher
         [SerializeField]
         private string m_GroupName;
 
+#if ENABLE_INPUT_SYSTEM
         [SerializeField]
         private AssetLauncherShortcutKey m_ShortcutKey = AssetLauncherShortcutKey.None;
+#endif
 
         [SerializeField]
         private List<AssetLauncherItem> m_ItemList = new();
@@ -67,8 +72,10 @@ namespace AssetLauncher
             set => m_GroupName = value;
         }
 
+#if ENABLE_INPUT_SYSTEM
         public AssetLauncherShortcutKey ShortcutKey =>
             m_ShortcutKey;
+#endif
 
         private AssetLauncherItem CurrentItem =>
             m_SelectIndex >= 0 && m_SelectIndex < m_ItemList.Count
@@ -105,6 +112,7 @@ namespace AssetLauncher
                 }
             }
 
+#if ENABLE_INPUT_SYSTEM
             using (new EditorGUI.DisabledScope(Keyboard.current == null))
             {
                 var shortcutKeyCode = (AssetLauncherShortcutKey)EditorGUILayout.EnumPopup("Shortcut Key (Ctrl+)", m_ShortcutKey);
@@ -114,6 +122,7 @@ namespace AssetLauncher
                     OnModifiedName.Invoke(this);
                 }
             }
+#endif
 
             UpdateFoldOutTargetList(FoldOutWithMouseDown(m_FoldOut, "Target List"));
             if (TryAcceptDropOnRect(GUILayoutUtility.GetLastRect(), out var paths))

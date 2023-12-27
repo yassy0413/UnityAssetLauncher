@@ -1,3 +1,4 @@
+#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 
 namespace AssetLauncher
@@ -43,3 +44,4 @@ namespace AssetLauncher
         Z = Key.Z,
     }
 }
+#endif

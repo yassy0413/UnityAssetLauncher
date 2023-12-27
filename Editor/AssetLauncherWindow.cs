@@ -7,8 +7,11 @@ using UnityEditor;
 using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using UnityEngine.UIElements;
-using UnityEngine.InputSystem;
 using Object = UnityEngine.Object;
+
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace AssetLauncher
 {
@@ -28,7 +31,7 @@ namespace AssetLauncher
         private string m_SettingsPath;
         private Settings m_Settings;
         private readonly Shared m_Shared = new();
-        
+
         private static AssetLauncherWindow Instance { get; set; }
 
         private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
@@ -513,6 +516,7 @@ namespace AssetLauncher
 
         private void ProcessShortcutKey()
         {
+#if ENABLE_INPUT_SYSTEM
             var keyboard = Keyboard.current;
 
             if (keyboard == null)
@@ -549,6 +553,7 @@ namespace AssetLauncher
                     return;
                 }
             }
+#endif
         }
     }
 }
