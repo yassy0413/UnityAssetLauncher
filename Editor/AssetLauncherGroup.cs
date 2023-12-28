@@ -179,11 +179,6 @@ namespace AssetLauncher
             
             using var _ = new EditorGUILayout.VerticalScope();
             
-            if (Shared.Editor is MaterialEditor) 
-            {
-                Shared.Editor.DrawHeader();
-            }
-
             if (m_SelectItemObject is TimelineAsset timelineAsset)
             {
                 if (GUILayout.Button("Open Timeline Editor"))
@@ -192,6 +187,12 @@ namespace AssetLauncher
                 }
 
                 GUILayout.Space(8);
+            }
+
+            if (Shared.Editor is MaterialEditor)
+            {
+                EditorGUIUtility.hierarchyMode = false;
+                Shared.Editor.DrawHeader();
             }
 
             Shared.Editor.OnInspectorGUI();
