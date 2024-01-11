@@ -189,9 +189,10 @@ namespace AssetLauncher
                 GUILayout.Space(8);
             }
 
+            EditorGUIUtility.hierarchyMode = false;
+
             if (Shared.Editor is MaterialEditor)
             {
-                EditorGUIUtility.hierarchyMode = false;
                 Shared.Editor.DrawHeader();
             }
 
