@@ -16,7 +16,7 @@ using UnityEngine.InputSystem;
 namespace AssetLauncher
 {
     [Serializable]
-    public sealed class AssetLauncherGroup
+    internal sealed class AssetLauncherGroup
     {
         private const int kCommentSpace = 8;
         private const int kInvalidIndex = -1;
@@ -55,7 +55,6 @@ namespace AssetLauncher
         public Action<AssetLauncherGroup> OnModified { get; set; }
         public Action<AssetLauncherGroup> OnModifiedName { get; set; }
         public AssetLauncherWindow.Settings Settings { get; set; }
-        
         public AssetLauncherWindow.Shared Shared { get; set; }
         public Color FontColor => m_FontColor;
         public Color BackgroundColor => m_BackgroundColor;
@@ -197,6 +196,78 @@ namespace AssetLauncher
             }
 
             Shared.Editor.OnInspectorGUI();
+        }
+
+        public static bool FoldOutWithMouseDown(bool foldOut, string content)
+        {
+            var newFoldOut = EditorGUILayout.Foldout(foldOut, content);
+
+            if (newFoldOut != foldOut)
+            {
+                return newFoldOut;
+            }
+
+            var currentEvent = Event.current;
+
+            if (currentEvent.type == EventType.MouseDown)
+            {
+                if (GUILayoutUtility.GetLastRect().Contains(currentEvent.mousePosition))
+                {
+                    currentEvent.Use();
+                    return !foldOut;
+                }
+            }
+
+            return foldOut;
+        }
+
+        public void RefreshEditor()
+        {
+            var currentItem = CurrentItem;
+            if (currentItem == null)
+            {
+                return;
+            }
+
+            var path = AssetDatabase.GetAssetPath(currentItem.Asset);
+            var requiredImporterEditor = false;
+
+            switch (currentItem.Asset)
+            {
+                case DefaultAsset:
+                    if (!AssetDatabase.IsValidFolder(path))
+                    {
+                        break;
+                    }
+
+                    var asset = GetFirstContainsAsset(path);
+                    if (asset != null)
+                    {
+                        EditorGUIUtility.PingObject(asset);
+                    }
+                    break;
+
+                case GameObject:
+                    if (path.EndsWith(".prefab"))
+                    {// We can not create Prefab Importer Editor.
+                        break;
+                    }
+                    requiredImporterEditor = true;
+                    break;
+
+                case Texture2D:
+                    requiredImporterEditor = true;
+                    break;
+            }
+
+            if (requiredImporterEditor)
+            {
+                Shared.SetImporterEditor(path);
+            }
+            else
+            {
+                Shared.SetEditor(currentItem.Asset);
+            }
         }
 
         private void OpenTimelineEditor(TimelineAsset timelineAsset)
@@ -342,29 +413,6 @@ namespace AssetLauncher
             }
         }
 
-        public static bool FoldOutWithMouseDown(bool foldOut, string content)
-        {
-            var newFoldOut = EditorGUILayout.Foldout(foldOut, content);
-
-            if (newFoldOut != foldOut)
-            {
-                return newFoldOut;
-            }
-
-            var currentEvent = Event.current;
-
-            if (currentEvent.type == EventType.MouseDown)
-            {
-                if (GUILayoutUtility.GetLastRect().Contains(currentEvent.mousePosition))
-                {
-                    currentEvent.Use();
-                    return !foldOut;
-                }
-            }
-
-            return foldOut;
-        }
-
         private static bool TryAcceptDropOnRect(Rect rect, out string[] paths)
         {
             var currentEvent = Event.current;
@@ -401,55 +449,6 @@ namespace AssetLauncher
             }
             m_FoldOut = on;
             OnModified.Invoke(this);
-        }
-
-        public void RefreshEditor()
-        {
-            var currentItem = CurrentItem;
-            if (currentItem == null)
-            {
-                return;
-            }
-
-            var path = AssetDatabase.GetAssetPath(currentItem.Asset);
-            var requiredImporterEditor = false;
-            
-            switch (currentItem.Asset)
-            {
-                case DefaultAsset:
-                    if (!AssetDatabase.IsValidFolder(path))
-                    {
-                        break;
-                    }
-
-                    var asset = GetFirstContainsAsset(path);
-                    if (asset != null)
-                    {
-                        EditorGUIUtility.PingObject(asset);
-                    }
-                    break;
-                
-                case GameObject:
-                    if (path.EndsWith(".prefab"))
-                    {// We can not create Prefab Importer Editor.
-                        break;
-                    }
-                    requiredImporterEditor = true;
-                    break;
-                
-                case Texture2D:
-                    requiredImporterEditor = true;
-                    break;
-            }
-
-            if (requiredImporterEditor)
-            {
-                Shared.SetImporterEditor(path);
-            }
-            else
-            {
-                Shared.SetEditor(currentItem.Asset);
-            }
         }
 
         private void SelectItem(int index)

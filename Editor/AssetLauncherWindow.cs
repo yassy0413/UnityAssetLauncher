@@ -15,12 +15,13 @@ using UnityEngine.InputSystem;
 
 namespace AssetLauncher
 {
-    public sealed class AssetLauncherWindow : EditorWindow
+    internal sealed class AssetLauncherWindow : EditorWindow
     {
         private List<AssetLauncherGroup> m_GroupInstanceList;
         private Vector2 m_ScrollPosition;
         private GUIContent m_GuiContentPlus;
         private GUIContent m_GuiContentMinus;
+        private GUIContent m_GuiContentFolder;
         private GUIStyle m_GuiStyleGroup;
         private GUIStyle m_GuiStyleGroupBold;
         private IMGUIContainer m_GroupSelectorPane;
@@ -34,13 +35,23 @@ namespace AssetLauncher
 
         private static AssetLauncherWindow Instance { get; set; }
 
-        private string GetGroupDataPath(int id) => $"{m_GroupPath}/group_{id}.json";
+        private string DataPath =>
+            Path.Join(Application.persistentDataPath, "AssetLauncher");
+
+        private string GetGroupDataPath(int id) =>
+            $"{m_GroupPath}/group_{id}.json";
 
         public enum ButtonTextAnchor
         {
             Left,
             Center,
             Right,
+        }
+
+        public enum Layout
+        {
+            Vertical,
+            Horizontal,
         }
 
         [Serializable]
@@ -57,7 +68,7 @@ namespace AssetLauncher
             public ButtonTextAnchor ButtonTextAnchor = ButtonTextAnchor.Center;
             public Layout Layout = Layout.Vertical;
         }
-        
+
         public sealed class Shared
         {
             private Editor m_Editor;
@@ -68,12 +79,6 @@ namespace AssetLauncher
 
             public void SetImporterEditor(string path) =>
                 Editor.CreateCachedEditor(AssetImporter.GetAtPath(path), null, ref m_Editor);
-        }
-
-        public enum Layout
-        {
-            Vertical,
-            Horizontal,
         }
 
         [Shortcut("AssetLauncher/Open Key", KeyCode.L, ShortcutModifiers.Control)]
@@ -122,7 +127,7 @@ namespace AssetLauncher
                 return;
             }
 
-            var dataPath = Path.Join(Application.persistentDataPath, "AssetLauncher");
+            var dataPath = DataPath;
             m_GroupPath = $"{dataPath}/group";
 
             if (!Directory.Exists(m_GroupPath))
@@ -141,6 +146,7 @@ namespace AssetLauncher
             else
             {
                 m_GroupInstanceList = m_Settings.GroupIdList
+                    .AsParallel()
                     .Select(x =>
                     {
                         var path = GetGroupDataPath(x);
@@ -148,6 +154,7 @@ namespace AssetLauncher
                         group.Shared = m_Shared;
                         return group;
                     })
+                    .OrderBy(x => x.Id)
                     .ToList();
 
                 SelectGroup(m_Settings.SelectGroupIndex);
@@ -194,8 +201,26 @@ namespace AssetLauncher
         private void DrawHeader()
         {
             InitializeGuiStyles();
-            
-            var settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
+
+            var settingsFoldout = false;
+            using (new GUILayout.HorizontalScope())
+            {
+                using (new GUILayout.VerticalScope())
+                {
+                    GUILayout.Space(8);
+                    settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
+                }
+                GUILayout.FlexibleSpace();
+                using (new EditorGUIUtility.IconSizeScope(new Vector2(16, 16)))
+                {
+                    if (GUILayout.Button(m_GuiContentFolder, GUILayout.ExpandWidth(false)))
+                    {
+                        EditorUtility.RevealInFinder(DataPath);
+                    }
+                }
+                GUILayout.Space(8);
+            }
+
             if (m_Settings.FoldOut != settingsFoldout)
             {
                 m_Settings.FoldOut = settingsFoldout;
@@ -483,7 +508,7 @@ namespace AssetLauncher
 
         private void InitializeGuiStyles()
         {
-            if (m_GuiContentPlus != null)
+            if (m_GuiStyleGroup != null)
             {
                 return;
             }
@@ -497,6 +522,7 @@ namespace AssetLauncher
 
             m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
             m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
+            m_GuiContentFolder = new GUIContent(EditorGUIUtility.IconContent("Folder Icon"));
             m_GuiStyleGroup = new GUIStyle(GUI.skin.button)
             {
                 alignment = buttonTextAnchor
@@ -504,14 +530,14 @@ namespace AssetLauncher
             m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button)
             {
                 alignment = buttonTextAnchor,
-                fontStyle = FontStyle.Bold,
-                fontSize = 13
+                fontStyle = FontStyle.BoldAndItalic,
+                fontSize = 14,
             };
         }
 
         private void ResetGuiStyles()
         {
-            m_GuiContentPlus = null;
+            m_GuiStyleGroup = null;
         }
 
         private void ProcessShortcutKey()

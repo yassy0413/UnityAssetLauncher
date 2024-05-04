@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 namespace AssetLauncher
 {
-    public enum AssetLauncherShortcutKey
+    internal enum AssetLauncherShortcutKey
     {
         None = Key.None,
         Digit1 = Key.Digit1,

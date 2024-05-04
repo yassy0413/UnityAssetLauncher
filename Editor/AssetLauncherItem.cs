@@ -5,7 +5,7 @@ using UnityEngine;
 namespace AssetLauncher
 {
     [Serializable]
-    public sealed class AssetLauncherItem
+    internal sealed class AssetLauncherItem
     {
         [SerializeField]
         private string m_Guid;
