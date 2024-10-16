@@ -34,8 +34,8 @@ namespace AssetLauncher
                 {
                     return null;
                 }
-                    
-                m_Asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path);
+                
+                m_Asset = AssetDatabase.LoadMainAssetAtPath(path);
                 return m_Asset;
             }
             set
