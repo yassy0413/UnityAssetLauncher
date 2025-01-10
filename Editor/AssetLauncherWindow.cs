@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,25 +19,25 @@ namespace AssetLauncher
 {
     internal sealed class AssetLauncherWindow : EditorWindow
     {
-        private List<AssetLauncherGroup> m_GroupInstanceList;
+        private readonly List<AssetLauncherGroup> m_GroupInstanceList = new();
         private Vector2 m_ScrollPosition;
-        private GUIContent m_GuiContentPlus;
-        private GUIContent m_GuiContentMinus;
-        private GUIContent m_GuiContentFolder;
-        private GUIStyle m_GuiStyleGroup;
-        private GUIStyle m_GuiStyleGroupBold;
-        private IMGUIContainer m_GroupSelectorPane;
-        private IMGUIContainer m_GroupInspectorPane;
-        private IMGUIContainer m_GroupTargetListPane;
+        private GUIContent? m_GuiContentPlus;
+        private GUIContent? m_GuiContentMinus;
+        private GUIContent? m_GuiContentFolder;
+        private GUIStyle? m_GuiStyleGroup;
+        private GUIStyle? m_GuiStyleGroupBold;
+        private IMGUIContainer? m_GroupSelectorPane;
+        private IMGUIContainer? m_GroupInspectorPane;
+        private IMGUIContainer? m_GroupTargetListPane;
 
-        private string m_GroupPath;
-        private string m_SettingsPath;
-        private Settings m_Settings;
+        private string m_GroupPath = string.Empty;
+        private string m_SettingsPath = string.Empty;
+        private Settings m_Settings = new();
         private readonly Shared m_Shared = new();
 
-        private static AssetLauncherWindow Instance { get; set; }
+        private static AssetLauncherWindow? Instance { get; set; }
 
-        private string DataPath =>
+        private static string DataPath =>
             Path.Join(Application.persistentDataPath, "AssetLauncher");
 
         private string GetGroupDataPath(int id) =>
@@ -71,8 +73,8 @@ namespace AssetLauncher
 
         public sealed class Shared
         {
-            private Editor m_Editor;
-            public Editor Editor => m_Editor;
+            private Editor? m_Editor;
+            public Editor? Editor => m_Editor;
 
             public void SetEditor(Object targetObject) =>
                 Editor.CreateCachedEditor(targetObject, null, ref m_Editor);
@@ -112,7 +114,7 @@ namespace AssetLauncher
 
         private void Update()
         {
-            if (m_GroupInstanceList?.Count <= 0)
+            if (m_GroupInstanceList.Count <= 0)
             {
                 return;
             }
@@ -122,11 +124,6 @@ namespace AssetLauncher
 
         private void Setup()
         {
-            if (m_GroupInstanceList != null)
-            {
-                return;
-            }
-
             var dataPath = DataPath;
             m_GroupPath = $"{dataPath}/group";
 
@@ -140,12 +137,13 @@ namespace AssetLauncher
 
             if (m_Settings.GroupIdList.Count <= 0)
             {
-                m_GroupInstanceList = new List<AssetLauncherGroup>();
+                m_GroupInstanceList.Clear();
                 AddGroup();
             }
             else
             {
-                m_GroupInstanceList = m_Settings.GroupIdList
+                m_GroupInstanceList.Clear();
+                m_GroupInstanceList.AddRange(m_Settings.GroupIdList
                     .AsParallel()
                     .Select(x =>
                     {
@@ -154,8 +152,7 @@ namespace AssetLauncher
                         group.Shared = m_Shared;
                         return group;
                     })
-                    .OrderBy(x => x.Id)
-                    .ToList();
+                    .OrderBy(x => x.Id));
 
                 SelectGroup(m_Settings.SelectGroupIndex);
             }
@@ -166,7 +163,7 @@ namespace AssetLauncher
             }
         }
 
-        private AssetLauncherGroup CurrentGroup =>
+        private AssetLauncherGroup? CurrentGroup =>
             m_Settings.SelectGroupIndex >= 0 && m_Settings.SelectGroupIndex < m_GroupInstanceList.Count
                 ? m_GroupInstanceList[m_Settings.SelectGroupIndex]
                 : null;
@@ -186,7 +183,8 @@ namespace AssetLauncher
             }
             else
             {
-                var paneV = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
+                var paneV = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight,
+                    TwoPaneSplitViewOrientation.Vertical);
                 paneV.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
                 paneV.Add(m_GroupTargetListPane = new IMGUIContainer(DrawTargetList));
 
@@ -202,7 +200,7 @@ namespace AssetLauncher
         {
             InitializeGuiStyles();
 
-            var settingsFoldout = false;
+            bool settingsFoldout;
             using (new GUILayout.HorizontalScope())
             {
                 using (new GUILayout.VerticalScope())
@@ -210,6 +208,7 @@ namespace AssetLauncher
                     GUILayout.Space(8);
                     settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
                 }
+
                 GUILayout.FlexibleSpace();
                 using (new EditorGUIUtility.IconSizeScope(new Vector2(16, 16)))
                 {
@@ -218,6 +217,7 @@ namespace AssetLauncher
                         EditorUtility.RevealInFinder(DataPath);
                     }
                 }
+
                 GUILayout.Space(8);
             }
 
@@ -226,6 +226,7 @@ namespace AssetLauncher
                 m_Settings.FoldOut = settingsFoldout;
                 SaveSettings();
             }
+
             if (settingsFoldout)
             {
                 using var _ = new EditorGUI.IndentLevelScope();
@@ -254,7 +255,8 @@ namespace AssetLauncher
                     SaveSettings();
                 }
 
-                var buttonTextAnchor = (ButtonTextAnchor)EditorGUILayout.EnumPopup("Button Text Anchor", m_Settings.ButtonTextAnchor);
+                var buttonTextAnchor =
+                    (ButtonTextAnchor)EditorGUILayout.EnumPopup("Button Text Anchor", m_Settings.ButtonTextAnchor);
                 if (buttonTextAnchor != m_Settings.ButtonTextAnchor)
                 {
                     m_Settings.ButtonTextAnchor = buttonTextAnchor;
@@ -278,6 +280,11 @@ namespace AssetLauncher
 
         private void DrawGroupSelector()
         {
+            if (m_GroupSelectorPane == null)
+            {
+                return;
+            }
+
             var contentRect = m_GroupSelectorPane.contentRect;
 
             if (m_Settings.GroupSelectionHeight != (int)contentRect.height)
@@ -295,7 +302,7 @@ namespace AssetLauncher
 
                 using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition, EditorStyles.helpBox);
                 m_ScrollPosition = scroll.scrollPosition;
-                
+
                 var index = DrawGroupSelectionGrid(m_Settings.SelectGroupIndex, rect.width - 24);
                 if (index != m_Settings.SelectGroupIndex)
                 {
@@ -307,8 +314,8 @@ namespace AssetLauncher
             {
                 var rect = new Rect(contentRect.x, contentRect.height - FooterHeight, contentRect.width, FooterHeight);
 
-                using var _ = new GUILayout.AreaScope(rect);
-                using var __ = new GUILayout.HorizontalScope();
+                using var areaScope = new GUILayout.AreaScope(rect);
+                using var horizontalScope = new GUILayout.HorizontalScope();
 
                 GUILayout.FlexibleSpace();
 
@@ -328,6 +335,11 @@ namespace AssetLauncher
 
         private void DrawTargetList()
         {
+            if (m_GroupTargetListPane == null)
+            {
+                return;
+            }
+
             var contentRect = m_GroupTargetListPane.contentRect;
 
             if (m_Settings.GroupSelectionWidth != (int)contentRect.width)
@@ -341,7 +353,7 @@ namespace AssetLauncher
 
         private void DrawInspector()
         {
-            if (m_GroupInstanceList.Count <= 0)
+            if (m_GroupInstanceList.Count <= 0 || m_GroupInspectorPane == null)
             {
                 return;
             }
@@ -375,17 +387,19 @@ namespace AssetLauncher
                 }
 
                 var group = m_GroupInstanceList[index];
-                
+
                 GUI.contentColor = group.FontColor;
                 GUI.backgroundColor = group.BackgroundColor;
 
-                if (GUILayout.Button(group.GroupName, selected == index? m_GuiStyleGroupBold : m_GuiStyleGroup, guiWidth))
+                if (GUILayout.Button(group.GroupName,
+                        selected == index ? m_GuiStyleGroupBold : m_GuiStyleGroup, guiWidth))
                 {
                     selected = index;
                 }
             }
+
             GUILayout.EndHorizontal();
-            
+
             GUI.contentColor = contentColor;
             GUI.backgroundColor = backgroundColor;
             return selected;
@@ -402,9 +416,9 @@ namespace AssetLauncher
 
                 // Group index
                 var newGroupIndex = m_GroupInstanceList
-                    .Select(x => x.GroupName)
-                    .Select(x => Regex.Replace(x, "group(\\d+)", "$1"))
-                    .Select(x => int.TryParse(x, out var v) ? v : 0)
+                    .Select(static x => x.GroupName)
+                    .Select(static x => Regex.Replace(x, "group(\\d+)", "$1"))
+                    .Select(static x => int.TryParse(x, out var v) ? v : 0)
                     .DefaultIfEmpty()
                     .Max() + 1;
 
@@ -422,7 +436,7 @@ namespace AssetLauncher
                     Shared = m_Shared,
                 };
                 m_GroupInstanceList.Add(group);
-                
+
                 // Refresh
                 SaveGroup(group);
                 SelectGroup(m_GroupInstanceList.Count - 1);
@@ -446,7 +460,7 @@ namespace AssetLauncher
 
             // Group instance list
             m_GroupInstanceList.RemoveAt(index);
-            
+
             // Refresh
             File.Delete(GetGroupDataPath(id));
             SelectGroup(m_Settings.SelectGroupIndex - 1);
@@ -459,7 +473,7 @@ namespace AssetLauncher
             m_Settings.SelectGroupIndex = m_GroupInstanceList.Count > 0
                 ? Math.Clamp(index, 0, m_GroupInstanceList.Count - 1)
                 : 0;
-            
+
             GUI.FocusControl("");
             CurrentGroup?.RefreshEditor();
         }
@@ -556,7 +570,7 @@ namespace AssetLauncher
             }
 
             var count = m_GroupInstanceList.Count;
-            
+
             for (var index = 0; index < count; ++index)
             {
                 if (index == m_Settings.SelectGroupIndex)

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using UnityEditor;
 using UnityEngine;
@@ -8,14 +10,14 @@ namespace AssetLauncher
     internal sealed class AssetLauncherItem
     {
         [SerializeField]
-        private string m_Guid;
+        private string m_Guid = string.Empty;
 
         [SerializeField]
-        private string m_Comment;
+        private string m_Comment = string.Empty;
 
-        private UnityEngine.Object m_Asset;
+        private UnityEngine.Object? m_Asset;
 
-        public UnityEngine.Object Asset
+        public UnityEngine.Object? Asset
         {
             get
             {
@@ -23,18 +25,18 @@ namespace AssetLauncher
                 {
                     return m_Asset;
                 }
-                
+
                 if (string.IsNullOrEmpty(m_Guid))
                 {
                     return null;
                 }
-                    
+
                 var path = AssetDatabase.GUIDToAssetPath(m_Guid);
                 if (string.IsNullOrEmpty(path))
                 {
                     return null;
                 }
-                
+
                 m_Asset = AssetDatabase.LoadMainAssetAtPath(path);
                 return m_Asset;
             }
@@ -45,7 +47,7 @@ namespace AssetLauncher
 
                 if (m_Asset != null)
                 {
-                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(m_Asset, out m_Guid, out long _);
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(m_Asset, out m_Guid, out _);
                 }
             }
         }

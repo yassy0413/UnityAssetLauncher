@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,7 +10,7 @@ using UnityEditor.Timeline;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Timeline;
-
+using Object = UnityEngine.Object;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -25,7 +27,7 @@ namespace AssetLauncher
         private int m_Id;
 
         [SerializeField]
-        private string m_GroupName;
+        private string m_GroupName = string.Empty;
 
 #if ENABLE_INPUT_SYSTEM
         [SerializeField]
@@ -43,19 +45,19 @@ namespace AssetLauncher
 
         [SerializeField]
         private Color m_FontColor = Color.white;
-        
+
         [SerializeField]
         private Color m_BackgroundColor = Color.white;
 
-        private UnityEngine.Object m_SelectItemObject;
-        private ReorderableList m_ReorderableList;
+        private Object? m_SelectItemObject;
+        private ReorderableList? m_ReorderableList;
         private Vector2 m_ScrollPosition;
-        private GUILayoutOption m_ColorGuiWidth;
+        private GUILayoutOption? m_ColorGuiWidth;
 
-        public Action<AssetLauncherGroup> OnModified { get; set; }
-        public Action<AssetLauncherGroup> OnModifiedName { get; set; }
-        public AssetLauncherWindow.Settings Settings { get; set; }
-        public AssetLauncherWindow.Shared Shared { get; set; }
+        public Action<AssetLauncherGroup> OnModified { get; set; } = _ => { };
+        public Action<AssetLauncherGroup> OnModifiedName { get; set; } = _ => { };
+        public AssetLauncherWindow.Settings Settings { get; set; } = new();
+        public AssetLauncherWindow.Shared Shared { get; set; } = new();
         public Color FontColor => m_FontColor;
         public Color BackgroundColor => m_BackgroundColor;
 
@@ -76,7 +78,7 @@ namespace AssetLauncher
             m_ShortcutKey;
 #endif
 
-        private AssetLauncherItem CurrentItem =>
+        private AssetLauncherItem? CurrentItem =>
             m_SelectIndex >= 0 && m_SelectIndex < m_ItemList.Count
                 ? m_ItemList[m_SelectIndex]
                 : null;
@@ -84,7 +86,7 @@ namespace AssetLauncher
         public void DrawHeader()
         {
             GUILayout.Space(8);
-            
+
             using (new GUILayout.HorizontalScope())
             {
                 var groupName = EditorGUILayout.TextField("Group Name", m_GroupName);
@@ -114,7 +116,8 @@ namespace AssetLauncher
 #if ENABLE_INPUT_SYSTEM
             using (new EditorGUI.DisabledScope(Keyboard.current == null))
             {
-                var shortcutKeyCode = (AssetLauncherShortcutKey)EditorGUILayout.EnumPopup("Shortcut Key (Ctrl+)", m_ShortcutKey);
+                var shortcutKeyCode =
+                    (AssetLauncherShortcutKey)EditorGUILayout.EnumPopup("Shortcut Key (Ctrl+)", m_ShortcutKey);
                 if (shortcutKeyCode != m_ShortcutKey)
                 {
                     m_ShortcutKey = shortcutKeyCode;
@@ -130,15 +133,17 @@ namespace AssetLauncher
                 {
                     m_ItemList.Add(new AssetLauncherItem
                     {
-                        Asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path)
+                        Asset = AssetDatabase.LoadAssetAtPath<Object>(path)
                     });
                 }
+
                 OnModified.Invoke(this);
             }
+
             if (m_FoldOut)
             {
                 SetupReorderableList();
-                m_ReorderableList.DoLayoutList();
+                m_ReorderableList?.DoLayoutList();
             }
         }
 
@@ -156,13 +161,11 @@ namespace AssetLauncher
                 var rect = GUILayoutUtility.GetRect(buttonLabel, buttonStyle);
                 if (GUI.Button(rect, buttonLabel, buttonStyle))
                 {
-                    new TargetDropdown(new AdvancedDropdownState())
-                    {
-                        OnItemSelected = SelectItem,
-                        QueryItemList = Enumerable.Range(0, m_ItemList.Count)
-                            .Where(x => m_ItemList[x] != null)
-                            .Select(x => (m_ItemList[x].NameWithComment, x))
-                    }.Show(rect);
+                    new TargetDropdown(
+                            queryItemList: Enumerable.Range(0, m_ItemList.Count)
+                                .Select(x => (m_ItemList[x].NameWithComment, x)),
+                            onItemSelected: SelectItem)
+                        .Show(rect);
                 }
             }
 
@@ -175,9 +178,9 @@ namespace AssetLauncher
             {
                 return;
             }
-            
+
             using var _ = new EditorGUILayout.VerticalScope();
-            
+
             if (m_SelectItemObject is TimelineAsset timelineAsset)
             {
                 if (GUILayout.Button("Open Timeline Editor"))
@@ -245,13 +248,16 @@ namespace AssetLauncher
                     {
                         EditorGUIUtility.PingObject(asset);
                     }
+
                     break;
 
                 case GameObject:
                     if (path.EndsWith(".prefab"))
-                    {// We can not create Prefab Importer Editor.
+                    {
+                        // We can not create Prefab Importer Editor.
                         break;
                     }
+
                     requiredImporterEditor = true;
                     break;
 
@@ -264,7 +270,7 @@ namespace AssetLauncher
             {
                 Shared.SetImporterEditor(path);
             }
-            else
+            else if (currentItem.Asset != null)
             {
                 Shared.SetEditor(currentItem.Asset);
             }
@@ -294,9 +300,9 @@ namespace AssetLauncher
             {
                 return;
             }
-            
-            var elementType = typeof(UnityEngine.Object);
-            
+
+            var elementType = typeof(Object);
+
             m_ReorderableList = new ReorderableList(m_ItemList, elementType)
             {
                 draggable = true,
@@ -307,7 +313,7 @@ namespace AssetLauncher
                 drawElementCallback = (rect, index, isActive, isFocused) =>
                 {
                     rect.height = EditorGUIUtility.singleLineHeight;
-                    
+
                     var item = m_ItemList[index];
                     var modified = false;
 
@@ -316,7 +322,9 @@ namespace AssetLauncher
                         var commentWidth = Settings.EnabledItemComment ? Settings.ItemCommentWidth : 0;
                         var commentSpace = Settings.EnabledItemComment ? kCommentSpace : 0;
 
-                        var objectFieldRect = new Rect(rect.x, rect.y, rect.width - commentWidth - commentSpace, rect.height);
+                        var objectFieldRect = new Rect(
+                            rect.x, rect.y, rect.width - commentWidth - commentSpace, rect.height);
+
                         var asset = EditorGUI.ObjectField(objectFieldRect, item.Asset, elementType, false);
                         if (!ReferenceEquals(asset, item.Asset))
                         {
@@ -326,7 +334,8 @@ namespace AssetLauncher
 
                         if (commentWidth > 0)
                         {
-                            var commentRect = new Rect(rect.x + rect.width - commentWidth, rect.y, commentWidth, rect.height);
+                            var commentRect = new Rect(
+                                rect.x + rect.width - commentWidth, rect.y, commentWidth, rect.height);
                             var comment = EditorGUI.TextField(commentRect, item.Comment);
                             if (comment != item.Comment)
                             {
@@ -357,11 +366,13 @@ namespace AssetLauncher
 
                     DeSelectItem();
                 },
+
                 onAddCallback = list =>
                 {
                     m_ItemList.Add(new AssetLauncherItem());
                     OnModified.Invoke(this);
                 },
+
                 onRemoveCallback = list =>
                 {
                     if (m_ItemList.Count <= 0)
@@ -369,48 +380,54 @@ namespace AssetLauncher
                         return;
                     }
 
-                    if (list.selectedIndices.Count > 1)
+                    switch (list.selectedIndices.Count)
                     {
-                        foreach (var index in list.selectedIndices.Reverse())
-                        {
-                            m_ItemList.RemoveAt(index);
-                        }
-                        DeSelectItem();
-                    }
-                    else if (list.selectedIndices.Count == 1)
-                    {
-                        m_ItemList.RemoveAt(list.selectedIndices[0]);
-                        do
-                        {
-                            if (m_ItemList.Count <= 0)
+                        case > 1:
+                            foreach (var index in list.selectedIndices.Reverse())
                             {
-                                DeSelectItem();
-                                break;
+                                m_ItemList.RemoveAt(index);
                             }
 
-                            var newIndex = list.selectedIndices[0] - 1;
-                            if (newIndex < 0)
-                            {
-                                DeSelectItem();
-                                break;
-                            }
+                            DeSelectItem();
+                            break;
 
-                            SelectItem(newIndex);
-                        } while (false);
-                    }
-                    else
-                    {
-                        m_ItemList.RemoveAt(m_ItemList.Count - 1);
-                        OnModified.Invoke(this);
+                        case 1:
+                            m_ItemList.RemoveAt(list.selectedIndices[0]);
+                            do
+                            {
+                                if (m_ItemList.Count <= 0)
+                                {
+                                    DeSelectItem();
+                                    break;
+                                }
+
+                                var newIndex = list.selectedIndices[0] - 1;
+                                if (newIndex < 0)
+                                {
+                                    DeSelectItem();
+                                    break;
+                                }
+
+                                SelectItem(newIndex);
+                            } while (false);
+
+                            break;
+
+                        default:
+                            m_ItemList.RemoveAt(m_ItemList.Count - 1);
+                            OnModified.Invoke(this);
+                            break;
                     }
                 }
             };
 
-            if (m_ItemList.Count > 0)
+            if (m_ItemList.Count <= 0)
             {
-                m_ReorderableList.index = m_SelectIndex;
-                SelectItem(m_SelectIndex);
+                return;
             }
+
+            m_ReorderableList.index = m_SelectIndex;
+            SelectItem(m_SelectIndex);
         }
 
         private static bool TryAcceptDropOnRect(Rect rect, out string[] paths)
@@ -429,7 +446,7 @@ namespace AssetLauncher
                     DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
                     currentEvent.Use();
                     break;
-                
+
                 case EventType.DragPerform:
                     paths = DragAndDrop.paths;
                     DragAndDrop.AcceptDrag();
@@ -447,6 +464,7 @@ namespace AssetLauncher
             {
                 return;
             }
+
             m_FoldOut = on;
             OnModified.Invoke(this);
         }
@@ -464,21 +482,17 @@ namespace AssetLauncher
                 if (m_ReorderableList.index != m_SelectIndex)
                 {
                     if (m_SelectIndex < 0)
-                    {
                         m_ReorderableList.ClearSelection();
-                    }
                     else
-                    {
                         m_ReorderableList.index = m_SelectIndex;
-                    }
                 }
             }
-            
+
             if (index < 0)
             {
                 return;
             }
-            
+
             m_SelectItemObject = m_ItemList[index].Asset;
             RefreshEditor();
         }
@@ -488,27 +502,22 @@ namespace AssetLauncher
             SelectItem(kInvalidIndex);
         }
 
-        private UnityEngine.Object GetFirstContainsAsset(string path)
+        private Object? GetFirstContainsAsset(string path)
         {
             var dir = Directory
                 .GetDirectories(path, "*", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault();
-            
+
             if (!string.IsNullOrEmpty(dir))
             {
-                return AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(dir);
+                return AssetDatabase.LoadAssetAtPath<Object>(dir);
             }
 
             var meta = Directory
                 .GetFiles(path, "*", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(x => !x.EndsWith(".meta"));
+                .FirstOrDefault(static x => !x.EndsWith(".meta", StringComparison.InvariantCulture));
 
-            if (!string.IsNullOrEmpty(meta))
-            {
-                return AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(meta);
-            }
-
-            return null;
+            return string.IsNullOrEmpty(meta) ? null : AssetDatabase.LoadAssetAtPath<Object>(meta);
         }
 
         private sealed class TargetDropdownItem : AdvancedDropdownItem
@@ -523,18 +532,21 @@ namespace AssetLauncher
 
         private sealed class TargetDropdown : AdvancedDropdown
         {
-            public IEnumerable<(string name, int id)> QueryItemList { get; set; }
-            public Action<int> OnItemSelected { get; set; }
+            private readonly IEnumerable<(string name, int id)> m_QueryItemList;
+            private readonly Action<int> m_OnItemSelected;
 
-            public TargetDropdown(AdvancedDropdownState state) : base(state)
+            public TargetDropdown(IEnumerable<(string name, int id)> queryItemList, Action<int> onItemSelected)
+                : base(new AdvancedDropdownState())
             {
+                m_QueryItemList = queryItemList;
+                m_OnItemSelected = onItemSelected;
             }
 
             protected override void ItemSelected(AdvancedDropdownItem item)
             {
                 if (item is TargetDropdownItem v)
                 {
-                    OnItemSelected?.Invoke(v.Index);
+                    m_OnItemSelected?.Invoke(v.Index);
                 }
             }
 
@@ -542,10 +554,12 @@ namespace AssetLauncher
             {
                 var root = new AdvancedDropdownItem(string.Empty);
                 root.AddChild(new TargetDropdownItem(string.Empty, -1));
-                foreach (var (name, index) in QueryItemList)
+
+                foreach (var (name, index) in m_QueryItemList)
                 {
                     root.AddChild(new TargetDropdownItem(name, index));
                 }
+
                 return root;
             }
         }
