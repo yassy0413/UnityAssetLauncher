@@ -191,14 +191,17 @@ namespace AssetLauncher
                 GUILayout.Space(8);
             }
 
+            var hierarchyMode = EditorGUIUtility.hierarchyMode;
             EditorGUIUtility.hierarchyMode = false;
-
-            if (Shared.Editor is MaterialEditor)
             {
-                Shared.Editor.DrawHeader();
-            }
+                if (Shared.Editor is MaterialEditor)
+                {
+                    Shared.Editor.DrawHeader();
+                }
 
-            Shared.Editor.OnInspectorGUI();
+                Shared.Editor.OnInspectorGUI();
+            }
+            EditorGUIUtility.hierarchyMode = hierarchyMode;
         }
 
         public static bool FoldOutWithMouseDown(bool foldOut, string content)
@@ -274,6 +277,10 @@ namespace AssetLauncher
             {
                 Shared.SetEditor(currentItem.Asset);
             }
+            else
+            {
+                Shared.ClearEditor();
+            }
         }
 
         private void OpenTimelineEditor(TimelineAsset timelineAsset)
@@ -330,6 +337,12 @@ namespace AssetLauncher
                         {
                             item.Asset = asset;
                             modified = true;
+
+                            if (index == m_SelectIndex)
+                            {
+                                m_SelectItemObject = asset;
+                                RefreshEditor();
+                            }
                         }
 
                         if (commentWidth > 0)
@@ -426,8 +439,7 @@ namespace AssetLauncher
                 return;
             }
 
-            m_ReorderableList.index = m_SelectIndex;
-            SelectItem(m_SelectIndex);
+            SelectItem(Math.Clamp(m_SelectIndex, kInvalidIndex, m_ItemList.Count - 1));
         }
 
         private static bool TryAcceptDropOnRect(Rect rect, out string[] paths)
