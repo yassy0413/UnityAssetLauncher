@@ -1,53 +1,153 @@
-Unity Asset Launcher
-===
+# Unity Asset Launcher
 
-About Unity Asset Launcher
----
-It is a very simple and easy-to-use asset launcher.
+[日本語](README_jp.md)
 
-It helps you register frequently used assets or assets whose location you tend to forget so that you can access them easily.
+Unity Asset Launcher is a simple editor window for keeping frequently used Unity assets close at hand.
 
-You can also select registered assets and display their inspectors, making it easier to edit ScriptableObjects, for example.
+Register folders, ScriptableObjects, materials, textures, Timeline assets, prefabs, scenes, or any other project asset, then select and inspect them from one compact utility window.
 
-You can easily Open and Close them from a shortcut key.
+![Scriptable Assets](Editor/StoreDocument/ScriptableAssets.png)
 
-![](Editor/StoreDocument/ScriptableAssets.png)
+![Folders](Editor/StoreDocument/Folders.png)
 
-![](Editor/StoreDocument/Folders.png)
+## Features
 
+- Register frequently used assets in launcher groups.
+- Select registered assets and display their Inspector directly inside the launcher.
+- Organize assets into multiple groups.
+- Rename groups and customize group button colors.
+- Reorder launcher items.
+- Add optional comments to launcher items.
+- Drag and drop assets into a group.
+- Open the Timeline Editor for registered `TimelineAsset` items.
+- Quickly toggle the launcher window with shortcuts.
+- Switch groups with optional group shortcut keys.
+- Store settings as personal local editor data.
 
-Attach comment to Items
----
+## Usage
 
-![](Editor/StoreDocument/SettingsAndFolders.png)
+Open the launcher from:
 
+```text
+Window > Asset Launcher
+```
 
-Item Selection
---- 
+The same menu item toggles the launcher window. If the window is already open, selecting the menu item closes it.
 
-![](Editor/StoreDocument/ItemSelection.gif)
+You can also toggle the window with:
 
+```text
+Ctrl + L
+Ctrl + Middle Mouse Button
+```
 
-Usage
---- 
+![Item Selection](Editor/StoreDocument/ItemSelection.gif)
 
-[Window] -> [Asset Launcher]
-to show the Asset Launcher Window.
+## Groups
 
-OR
+Assets are organized into groups.
 
-Shortcut keys can be used to switch the window display.
-- Ctrl + L
-- Ctrl + Mouse Middle Button
+Use the `+` and `-` buttons in the group area to add or remove groups.
 
+Each group can define:
 
-UPM
---- 
-**https://github.com/yassy0413/UnityAssetLauncher.git**
+- Group name
+- Font color
+- Background color
+- Optional shortcut key
+- Target asset list
 
-You can install from Package Manager.
+When the Unity Input System is enabled, each group can also be assigned a `Ctrl + Key` shortcut for quick group switching.
 
-![](Editor/StoreDocument/PackageManager01.png)
+## Items
 
-![](Editor/StoreDocument/PackageManager02.png)
+Add assets to the current group by:
 
+- Dragging assets into the `Target List` foldout area.
+- Pressing the `+` button in the target list.
+- Assigning an asset manually in the object field.
+
+Selecting an item shows its Inspector in the launcher window.
+
+For folders, the launcher pings the first contained asset so you can jump into the folder quickly.
+
+For supported importer-backed assets such as textures, the launcher displays the importer inspector.
+
+For `TimelineAsset` items, an `Open Timeline Editor` button is shown.
+
+## Item comments
+
+Item comments can be enabled from the settings foldout.
+
+![Settings and Folders](Editor/StoreDocument/SettingsAndFolders.png)
+
+Enable:
+
+```text
+Settings > Enable Item Comment
+```
+
+When enabled, each launcher item has a comment field. The comment is shown next to the asset name in the item selection dropdown.
+
+This is useful when multiple assets have similar names, or when an asset needs a short note about its purpose.
+
+## Settings
+
+Open the `Settings` foldout at the top of the launcher window to configure:
+
+- Group selection column count
+- Item comment visibility
+- Item comment width
+- Group button text alignment
+- Layout mode
+
+The launcher supports two layout modes:
+
+- `Vertical`: Group selector at the top, Inspector below.
+- `Horizontal`: Group selector and target list on the left, Inspector on the right.
+
+Use the folder icon in the header to reveal the launcher data folder in Finder / Explorer.
+
+## Shortcuts
+
+Window toggle shortcuts:
+
+```text
+Ctrl + L
+Ctrl + Middle Mouse Button
+```
+
+Group switching shortcuts are available when the Unity Input System is enabled. Assign them per group from:
+
+```text
+Group > Shortcut Key (Ctrl+)
+```
+
+## Settings storage
+
+Launcher data is saved under Unity's `Application.persistentDataPath`:
+
+```text
+AssetLauncher/settings.json
+AssetLauncher/group/group_{id}.json
+```
+
+This keeps the launcher configuration personal to each user and outside the project by default.
+
+## Installation with UPM
+
+You can install this package from Unity Package Manager using the Git URL:
+
+```text
+https://github.com/yassy0413/UnityAssetLauncher.git
+```
+
+![Package Manager Step 1](Editor/StoreDocument/PackageManager01.png)
+
+![Package Manager Step 2](Editor/StoreDocument/PackageManager02.png)
+
+## Package information
+
+- Package name: `com.yassy.assetlauncher`
+- Unity version: `2020.1` or newer
+- License: `GPL-3.0`
