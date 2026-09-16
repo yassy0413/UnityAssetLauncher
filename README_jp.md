@@ -61,13 +61,13 @@ Unity Input System が有効な場合、各 group に `Ctrl + Key` の切り替�
 
 ## Items
 
-現在の group へアセットを追加する方法:
+現在の group へアセットを追加するには、Project ウィンドウから target list へドラッグ & ドロップします。挿入位置はマーカーで表示され、行と行の間にドロップするとその位置に、行の下の空き領域にドロップすると最後尾に追加されます。
 
-- `Target List` foldout エリアへアセットをドラッグ & ドロップする。
-- target list の `+` ボタンを押す。
-- object field へ手動でアセットを割り当てる。
+各行にはアセットのアイコンと名前が表示されます。
 
-item を選択すると、launcher window 内にその Inspector が表示されます。
+- 行をクリックすると、Project ウィンドウでそのアセットが選択（ping）され、launcher window 内に Inspector が表示されます。
+- 行をドラッグして並べ替えられます。
+- 行を右クリックして `Remove` を選ぶか、リストにフォーカスがある状態で `Delete` / `Backspace` キーを押すと削除できます。複数行を選択している場合はまとめて削除されます。
 
 フォルダの場合は、フォルダ内の最初のアセットを ping して、フォルダへ素早く移動しやすくします。
 
@@ -98,6 +98,7 @@ launcher window 上部の `Settings` foldout から以下を設定できます�
 - Group selection column count
 - Item comment visibility
 - Item comment width
+- Item font size（target list の行の文字サイズ）
 - Group button text alignment
 - Layout mode
 
@@ -105,6 +106,8 @@ layout mode は以下の2種類です。
 
 - `Vertical`: 上部に group selector、下部に Inspector を表示します。
 - `Horizontal`: 左側に group selector と target list、右側に Inspector を表示します。
+
+`Vertical` レイアウトでは、target list と Inspector の境界をドラッグして高さを調整できます。
 
 ヘッダーのフォルダアイコンから、launcher のデータ保存フォルダを Finder / Explorer で開けます。
 

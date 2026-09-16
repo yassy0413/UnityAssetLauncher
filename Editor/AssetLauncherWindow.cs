@@ -20,19 +20,19 @@ namespace AssetLauncher
     internal sealed class AssetLauncherWindow : EditorWindow
     {
         private readonly List<AssetLauncherGroup> m_GroupInstanceList = new();
-        private GUIContent? m_GuiContentPlus;
-        private GUIContent? m_GuiContentMinus;
-        private GUIContent? m_GuiContentFolder;
-        private GUIStyle? m_GuiStyleGroup;
-        private GUIStyle? m_GuiStyleGroupBold;
-        private IMGUIContainer? m_GroupSelectorPane;
-        private IMGUIContainer? m_GroupInspectorPane;
-        private IMGUIContainer? m_GroupTargetListPane;
 
         private string m_GroupPath = string.Empty;
         private string m_SettingsPath = string.Empty;
         private Settings m_Settings = new();
         private readonly Shared m_Shared = new();
+
+        // UI Toolkit
+        private VisualElement? m_LayoutRoot;
+        private VisualElement? m_GroupGrid;
+        private VisualElement? m_GroupHeaderHost;
+        private VisualElement? m_TargetListHost;
+        private VisualElement? m_InspectorHost;
+        private TargetListView? m_TargetListView;
 
         private static AssetLauncherWindow? Instance { get; set; }
 
@@ -64,7 +64,9 @@ namespace AssetLauncher
             public int GroupSelectionXCount = 4;
             public int GroupSelectionWidth = 300;
             public int GroupSelectionHeight = 60;
+            public int TargetListHeight = 160;
             public int ItemCommentWidth = 180;
+            public int ItemFontSize = 12;
             public bool EnabledItemComment;
             public ButtonTextAnchor ButtonTextAnchor = ButtonTextAnchor.Center;
             public Layout Layout = Layout.Vertical;
@@ -76,10 +78,10 @@ namespace AssetLauncher
             public Editor? Editor => m_Editor;
 
             public void SetEditor(Object targetObject) =>
-                Editor.CreateCachedEditor(targetObject, null, ref m_Editor);
+                Editor.CreateCachedEditor(targetObject, null!, ref m_Editor!);
 
             public void SetImporterEditor(string path) =>
-                Editor.CreateCachedEditor(AssetImporter.GetAtPath(path), null, ref m_Editor);
+                Editor.CreateCachedEditor(AssetImporter.GetAtPath(path), null!, ref m_Editor!);
 
             public void ClearEditor()
             {
@@ -115,11 +117,13 @@ namespace AssetLauncher
 
             foreach (var group in m_GroupInstanceList)
             {
-                group.OnModified = SaveGroup;
-                group.OnModifiedName = ModifiedGroupName;
-                group.Settings = m_Settings;
-                group.Shared = m_Shared;
+                WireGroup(group);
             }
+        }
+
+        private void OnDisable()
+        {
+            m_Shared.ClearEditor();
         }
 
         private void Update()
@@ -159,6 +163,7 @@ namespace AssetLauncher
                         var path = GetGroupDataPath(x);
                         var group = LoadJson<AssetLauncherGroup>(path);
                         group.Shared = m_Shared;
+                        group.EnsureSelection();
                         return group;
                     })
                     .OrderBy(static x => x.Id));
@@ -171,7 +176,23 @@ namespace AssetLauncher
                 m_Settings.GroupSelectionHeight = 64;
             }
 
+            if (m_Settings.TargetListHeight < 40)
+            {
+                m_Settings.TargetListHeight = 40;
+            }
+
+            m_Settings.ItemFontSize = Math.Clamp(m_Settings.ItemFontSize,
+                TargetListView.kMinFontSize, TargetListView.kMaxFontSize);
+
             EnsureGroupSelectionHeight();
+        }
+
+        private void WireGroup(AssetLauncherGroup group)
+        {
+            group.OnModified = OnGroupModified;
+            group.OnModifiedName = OnGroupModifiedName;
+            group.Settings = m_Settings;
+            group.Shared = m_Shared;
         }
 
         private AssetLauncherGroup? CurrentGroup =>
@@ -179,256 +200,401 @@ namespace AssetLauncher
                 ? m_GroupInstanceList[m_Settings.SelectGroupIndex]
                 : null;
 
+        // ------------------------------------------------------------------ UI: root
+
         private void CreateGUI()
         {
-            rootVisualElement.Clear();
+            var root = rootVisualElement;
+            root.Clear();
 
-            rootVisualElement.Add(new IMGUIContainer(DrawHeader));
+            AssetLauncherStyles.Apply(root);
 
-            VisualElement pane;
+            root.Add(BuildHeader());
+            BuildLayout();
+        }
+
+        private void BuildLayout()
+        {
+            m_LayoutRoot?.RemoveFromHierarchy();
+            m_LayoutRoot = null;
+
+            m_GroupHeaderHost = new VisualElement();
+            m_TargetListHost = new VisualElement { style = { flexGrow = 1 } };
+            m_InspectorHost = new VisualElement { style = { flexGrow = 1 } };
+
+            var selector = BuildGroupSelector();
+            TrackFixedPaneSize(selector, vertical: true,
+                get: () => m_Settings.GroupSelectionHeight,
+                set: v => m_Settings.GroupSelectionHeight = v);
+
             if (m_Settings.Layout == Layout.Vertical)
             {
-                pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight, TwoPaneSplitViewOrientation.Vertical);
-                pane.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
-                pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+                // [ Group selector ]
+                // [ Group header   ]
+                // [ Target list    ]  <- splitter ->
+                // [ Inspector      ]
+                var groupPane = new VisualElement();
+                groupPane.AddToClassList(AssetLauncherStyles.GroupPane);
+                groupPane.Add(m_GroupHeaderHost);
+
+                var innerSplit = new TwoPaneSplitView(0, m_Settings.TargetListHeight,
+                    TwoPaneSplitViewOrientation.Vertical) { style = { flexGrow = 1 } };
+                innerSplit.Add(m_TargetListHost);
+                innerSplit.Add(m_InspectorHost);
+                groupPane.Add(innerSplit);
+
+                TrackFixedPaneSize(m_TargetListHost, vertical: true,
+                    get: () => m_Settings.TargetListHeight,
+                    set: v => m_Settings.TargetListHeight = v);
+
+                var split = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight,
+                    TwoPaneSplitViewOrientation.Vertical) { style = { flexGrow = 1 } };
+                split.Add(selector);
+                split.Add(groupPane);
+
+                m_LayoutRoot = split;
             }
             else
             {
-                var paneV = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight,
-                    TwoPaneSplitViewOrientation.Vertical);
-                paneV.Add(m_GroupSelectorPane = new IMGUIContainer(DrawGroupSelector));
-                paneV.Add(m_GroupTargetListPane = new IMGUIContainer(DrawTargetList));
+                // [ Group selector | Inspector ]
+                // [ Group header   |           ]
+                // [ Target list    |           ]
+                var leftBottom = new VisualElement();
+                leftBottom.AddToClassList(AssetLauncherStyles.GroupPane);
+                leftBottom.Add(m_GroupHeaderHost);
+                leftBottom.Add(m_TargetListHost);
 
-                pane = new TwoPaneSplitView(0, m_Settings.GroupSelectionWidth, TwoPaneSplitViewOrientation.Horizontal);
-                pane.Add(paneV);
-                pane.Add(m_GroupInspectorPane = new IMGUIContainer(DrawInspector));
+                var leftSplit = new TwoPaneSplitView(0, m_Settings.GroupSelectionHeight,
+                    TwoPaneSplitViewOrientation.Vertical) { style = { flexGrow = 1 } };
+                leftSplit.Add(selector);
+                leftSplit.Add(leftBottom);
+
+                TrackFixedPaneSize(leftSplit, vertical: false,
+                    get: () => m_Settings.GroupSelectionWidth,
+                    set: v => m_Settings.GroupSelectionWidth = v);
+
+                var right = new VisualElement();
+                right.AddToClassList(AssetLauncherStyles.GroupPane);
+                right.Add(m_InspectorHost);
+
+                var split = new TwoPaneSplitView(0, m_Settings.GroupSelectionWidth,
+                    TwoPaneSplitViewOrientation.Horizontal) { style = { flexGrow = 1 } };
+                split.Add(leftSplit);
+                split.Add(right);
+
+                m_LayoutRoot = split;
             }
 
-            rootVisualElement.Add(pane);
+            rootVisualElement.Add(m_LayoutRoot);
+            BindCurrentGroup();
         }
 
-        private void DrawHeader()
+        /// <summary>Persist the size of a TwoPaneSplitView fixed pane whenever the user drags the splitter.</summary>
+        private void TrackFixedPaneSize(VisualElement pane, bool vertical, Func<int> get, Action<int> set)
         {
-            InitializeGuiStyles();
-
-            bool settingsFoldout;
-            using (new GUILayout.HorizontalScope())
+            pane.RegisterCallback<GeometryChangedEvent>(evt =>
             {
-                using (new GUILayout.VerticalScope())
+                var size = (int)(vertical ? evt.newRect.height : evt.newRect.width);
+                if (size <= 0 || size == get())
                 {
-                    GUILayout.Space(8);
-                    settingsFoldout = AssetLauncherGroup.FoldOutWithMouseDown(m_Settings.FoldOut, "Settings");
+                    return;
                 }
 
-                GUILayout.FlexibleSpace();
-                using (new EditorGUIUtility.IconSizeScope(new Vector2(16, 16)))
-                {
-                    if (GUILayout.Button(m_GuiContentFolder, GUILayout.ExpandWidth(false)))
-                    {
-                        EditorUtility.RevealInFinder(DataPath);
-                    }
-                }
-
-                GUILayout.Space(8);
-            }
-
-            if (m_Settings.FoldOut != settingsFoldout)
-            {
-                m_Settings.FoldOut = settingsFoldout;
+                set(size);
                 SaveSettings();
-            }
-
-            if (settingsFoldout)
-            {
-                using var _ = new EditorGUI.IndentLevelScope();
-
-                var labelWidth = EditorGUIUtility.labelWidth;
-                EditorGUIUtility.labelWidth = 200;
-
-                var xCount = EditorGUILayout.IntField("Group Selection xCount", m_Settings.GroupSelectionXCount);
-                if (xCount > 0 && xCount != m_Settings.GroupSelectionXCount)
-                {
-                    m_Settings.GroupSelectionXCount = xCount;
-                    EnsureGroupSelectionHeight();
-                    SaveSettings();
-                    CreateGUI();
-                }
-
-                var enabledComment = EditorGUILayout.Toggle("Enable Item Comment", m_Settings.EnabledItemComment);
-                if (enabledComment != m_Settings.EnabledItemComment)
-                {
-                    m_Settings.EnabledItemComment = enabledComment;
-                    SaveSettings();
-                }
-
-                var commentWidth = EditorGUILayout.IntField("Item Comment Width", m_Settings.ItemCommentWidth);
-                if (commentWidth >= 60 && commentWidth != m_Settings.ItemCommentWidth)
-                {
-                    m_Settings.ItemCommentWidth = commentWidth;
-                    SaveSettings();
-                }
-
-                var buttonTextAnchor =
-                    (ButtonTextAnchor)EditorGUILayout.EnumPopup("Button Text Anchor", m_Settings.ButtonTextAnchor);
-                if (buttonTextAnchor != m_Settings.ButtonTextAnchor)
-                {
-                    m_Settings.ButtonTextAnchor = buttonTextAnchor;
-                    SaveSettings();
-                    ResetGuiStyles();
-                }
-
-                var layout = (Layout)EditorGUILayout.EnumPopup("Layout", m_Settings.Layout);
-                if (layout != m_Settings.Layout)
-                {
-                    m_Settings.Layout = layout;
-                    SaveSettings();
-                    CreateGUI();
-                }
-
-                GUILayout.Space(16);
-
-                EditorGUIUtility.labelWidth = labelWidth;
-            }
+            });
         }
 
-        private void DrawGroupSelector()
+        private void BindCurrentGroup()
         {
-            if (m_GroupSelectorPane == null)
+            if (m_GroupHeaderHost == null || m_TargetListHost == null || m_InspectorHost == null)
             {
                 return;
             }
 
-            var contentRect = m_GroupSelectorPane.contentRect;
+            m_GroupHeaderHost.Clear();
+            m_TargetListHost.Clear();
+            m_InspectorHost.Clear();
+            m_TargetListView = null;
 
-            if (m_Settings.GroupSelectionHeight != (int)contentRect.height)
+            var group = CurrentGroup;
+            if (group == null)
             {
-                m_Settings.GroupSelectionHeight = (int)contentRect.height;
-                SaveSettings();
+                return;
             }
 
-            const float FooterHeight = 30f;
+            m_GroupHeaderHost.Add(new GroupHeaderView(group));
+            m_TargetListHost.Add(m_TargetListView = new TargetListView(group, m_Settings));
+            m_InspectorHost.Add(new GroupInspectorView(group));
+        }
 
+        // ------------------------------------------------------------------ UI: settings header
+
+        private VisualElement BuildHeader()
+        {
+            var header = new VisualElement();
+            header.AddToClassList(AssetLauncherStyles.Header);
+
+            var foldout = new Foldout { text = "Settings", value = m_Settings.FoldOut };
+            foldout.AddToClassList(AssetLauncherStyles.HeaderSettings);
+            foldout.RegisterValueChangedCallback(evt =>
             {
-                var rect = new Rect(contentRect.x, contentRect.y, contentRect.width, contentRect.height - FooterHeight);
-
-                GUI.Box(rect, GUIContent.none, EditorStyles.helpBox);
-                using var _ = new GUILayout.AreaScope(rect);
-
-                var index = DrawGroupSelectionGrid(m_Settings.SelectGroupIndex, rect.width - 8);
-                if (index != m_Settings.SelectGroupIndex)
+                // Child toggles bubble ChangeEvent<bool> too; only react to the foldout itself.
+                if (evt.target != foldout || m_Settings.FoldOut == evt.newValue)
                 {
-                    SelectGroup(index);
+                    return;
+                }
+
+                m_Settings.FoldOut = evt.newValue;
+                SaveSettings();
+            });
+            header.Add(foldout);
+
+            var xCountField = new IntegerField("Group Selection xCount")
+            {
+                value = m_Settings.GroupSelectionXCount, isDelayed = true
+            };
+            xCountField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue <= 0)
+                {
+                    xCountField.SetValueWithoutNotify(m_Settings.GroupSelectionXCount);
+                    return;
+                }
+
+                if (evt.newValue == m_Settings.GroupSelectionXCount)
+                {
+                    return;
+                }
+
+                m_Settings.GroupSelectionXCount = evt.newValue;
+                EnsureGroupSelectionHeight();
+                SaveSettings();
+                BuildLayout();
+            });
+            foldout.Add(xCountField);
+
+            var commentToggle = new Toggle("Enable Item Comment") { value = m_Settings.EnabledItemComment };
+            foldout.Add(commentToggle);
+
+            var commentWidthField = new IntegerField("Item Comment Width")
+            {
+                value = m_Settings.ItemCommentWidth, isDelayed = true
+            };
+            commentWidthField.style.display = m_Settings.EnabledItemComment ? DisplayStyle.Flex : DisplayStyle.None;
+            commentWidthField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue < 60)
+                {
+                    commentWidthField.SetValueWithoutNotify(m_Settings.ItemCommentWidth);
+                    return;
+                }
+
+                if (evt.newValue == m_Settings.ItemCommentWidth)
+                {
+                    return;
+                }
+
+                m_Settings.ItemCommentWidth = evt.newValue;
+                SaveSettings();
+                m_TargetListView?.Rebuild();
+            });
+            foldout.Add(commentWidthField);
+
+            commentToggle.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.target != commentToggle || evt.newValue == m_Settings.EnabledItemComment)
+                {
+                    return;
+                }
+
+                m_Settings.EnabledItemComment = evt.newValue;
+                SaveSettings();
+                commentWidthField.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+                m_TargetListView?.Rebuild();
+            });
+
+            var fontSizeField = new IntegerField("Item Font Size")
+            {
+                value = m_Settings.ItemFontSize, isDelayed = true
+            };
+            fontSizeField.RegisterValueChangedCallback(evt =>
+            {
+                var fontSize = Math.Clamp(evt.newValue, TargetListView.kMinFontSize, TargetListView.kMaxFontSize);
+                if (fontSize != evt.newValue)
+                {
+                    fontSizeField.SetValueWithoutNotify(fontSize);
+                }
+
+                if (fontSize == m_Settings.ItemFontSize)
+                {
+                    return;
+                }
+
+                m_Settings.ItemFontSize = fontSize;
+                SaveSettings();
+                m_TargetListView?.Rebuild();
+            });
+            foldout.Add(fontSizeField);
+
+            var anchorField = new EnumField("Button Text Anchor", m_Settings.ButtonTextAnchor);
+            anchorField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue is not ButtonTextAnchor anchor || anchor == m_Settings.ButtonTextAnchor)
+                {
+                    return;
+                }
+
+                m_Settings.ButtonTextAnchor = anchor;
+                SaveSettings();
+                RefreshGroupButtons();
+            });
+            foldout.Add(anchorField);
+
+            var layoutField = new EnumField("Layout", m_Settings.Layout);
+            layoutField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue is not Layout layout || layout == m_Settings.Layout)
+                {
+                    return;
+                }
+
+                m_Settings.Layout = layout;
+                SaveSettings();
+                BuildLayout();
+            });
+            foldout.Add(layoutField);
+
+            var folderButton = new Button(() => EditorUtility.RevealInFinder(DataPath))
+            {
+                tooltip = "Open the tool data folder."
+            };
+            folderButton.AddToClassList(AssetLauncherStyles.IconButton);
+            folderButton.Add(new Image { image = AssetLauncherStyles.Icon("Folder Icon"), scaleMode = ScaleMode.ScaleToFit });
+            header.Add(folderButton);
+
+            return header;
+        }
+
+        // ------------------------------------------------------------------ UI: group selector
+
+        private VisualElement BuildGroupSelector()
+        {
+            var selector = new VisualElement();
+            selector.AddToClassList(AssetLauncherStyles.GroupSelector);
+
+            var box = new VisualElement();
+            box.AddToClassList(AssetLauncherStyles.Box);
+            selector.Add(box);
+
+            m_GroupGrid = new VisualElement();
+            m_GroupGrid.AddToClassList(AssetLauncherStyles.GroupGrid);
+            box.Add(m_GroupGrid);
+
+            var footer = new VisualElement();
+            footer.AddToClassList(AssetLauncherStyles.GroupFooter);
+            selector.Add(footer);
+
+            var addButton = new Button(AddGroup) { tooltip = "Add group" };
+            addButton.AddToClassList(AssetLauncherStyles.IconButton);
+            addButton.Add(new Image { image = AssetLauncherStyles.Icon("Toolbar Plus"), scaleMode = ScaleMode.ScaleToFit });
+            footer.Add(addButton);
+
+            var removeButton = new Button(() => RemoveGroup(m_Settings.SelectGroupIndex)) { tooltip = "Remove selected group" };
+            removeButton.AddToClassList(AssetLauncherStyles.IconButton);
+            removeButton.Add(new Image { image = AssetLauncherStyles.Icon("Toolbar Minus"), scaleMode = ScaleMode.ScaleToFit });
+            footer.Add(removeButton);
+
+            RefreshGroupButtons();
+            return selector;
+        }
+
+        private void RefreshGroupButtons()
+        {
+            if (m_GroupGrid == null)
+            {
+                return;
+            }
+
+            m_GroupGrid.Clear();
+
+            var columnCount = Math.Max(1, m_Settings.GroupSelectionXCount);
+            var cellWidth = Length.Percent(100f / columnCount);
+
+            var anchorClass = m_Settings.ButtonTextAnchor switch
+            {
+                ButtonTextAnchor.Left => AssetLauncherStyles.AnchorLeft,
+                ButtonTextAnchor.Right => AssetLauncherStyles.AnchorRight,
+                _ => AssetLauncherStyles.AnchorCenter,
+            };
+
+            for (var index = 0; index < m_GroupInstanceList.Count; ++index)
+            {
+                var group = m_GroupInstanceList[index];
+                var capturedIndex = index;
+
+                var cell = new VisualElement { style = { width = cellWidth, paddingLeft = 1, paddingRight = 1, paddingTop = 1, paddingBottom = 1 } };
+
+                var button = new Button(() =>
+                {
+                    SelectGroup(capturedIndex);
                     SaveSettings();
-                }
-            }
-
-            {
-                var rect = new Rect(contentRect.x, contentRect.height - FooterHeight, contentRect.width, FooterHeight);
-
-                using var areaScope = new GUILayout.AreaScope(rect);
-                using var horizontalScope = new GUILayout.HorizontalScope();
-
-                GUILayout.FlexibleSpace();
-
-                if (GUILayout.Button(m_GuiContentPlus, GUILayout.ExpandWidth(false)))
+                })
                 {
-                    AddGroup();
-                }
+                    text = group.GroupName,
+                    tooltip = group.GroupName,
+                };
+                button.AddToClassList(AssetLauncherStyles.GroupButton);
+                button.AddToClassList(anchorClass);
+                button.EnableInClassList(AssetLauncherStyles.GroupButtonSelected, index == m_Settings.SelectGroupIndex);
+                ApplyGroupColors(button, group);
 
-                if (GUILayout.Button(m_GuiContentMinus, GUILayout.ExpandWidth(false)))
-                {
-                    RemoveGroup(m_Settings.SelectGroupIndex);
-                }
-
-                GUILayout.Space(8);
+                cell.Add(button);
+                m_GroupGrid.Add(cell);
             }
         }
 
-        private void DrawTargetList()
+        /// <summary>
+        /// Approximates the IMGUI tint (GUI.backgroundColor / GUI.contentColor). White means "no tint",
+        /// so the default button look is kept in that case.
+        /// </summary>
+        private static void ApplyGroupColors(Button button, AssetLauncherGroup group)
         {
-            if (m_GroupTargetListPane == null)
+            var background = group.BackgroundColor;
+            if (background != Color.white)
             {
-                return;
+                var baseColor = EditorGUIUtility.isProSkin
+                    ? new Color(0.345f, 0.345f, 0.345f)
+                    : new Color(0.894f, 0.894f, 0.894f);
+
+                button.style.backgroundColor = new Color(
+                    baseColor.r * background.r,
+                    baseColor.g * background.g,
+                    baseColor.b * background.b,
+                    1f);
             }
 
-            var contentRect = m_GroupTargetListPane.contentRect;
-
-            if (m_Settings.GroupSelectionWidth != (int)contentRect.width)
+            var font = group.FontColor;
+            if (font != Color.white)
             {
-                m_Settings.GroupSelectionWidth = (int)contentRect.width;
-                SaveSettings();
+                button.style.color = font;
             }
-
-            CurrentGroup?.DrawHeader();
-        }
-
-        private void DrawInspector()
-        {
-            if (m_GroupInstanceList.Count <= 0 || m_GroupInspectorPane == null)
-            {
-                return;
-            }
-
-            using var _ = new GUILayout.AreaScope(m_GroupInspectorPane.contentRect);
-
-            var currentGroup = CurrentGroup;
-
-            if (m_Settings.Layout == Layout.Vertical)
-            {
-                currentGroup?.DrawHeader();
-            }
-
-            currentGroup?.DrawBody();
-        }
-
-        private int DrawGroupSelectionGrid(int selected, float width)
-        {
-            var guiWidth = GUILayout.Width(width / m_Settings.GroupSelectionXCount);
-            var contentColor = GUI.contentColor;
-            var backgroundColor = GUI.backgroundColor;
-
-            var groupCount = m_GroupInstanceList.Count;
-
-            using (new GUILayout.VerticalScope())
-            {
-                for (var rowStart = 0; rowStart < groupCount; rowStart += m_Settings.GroupSelectionXCount)
-                {
-                    using var _ = new GUILayout.HorizontalScope();
-                    var rowEnd = Math.Min(rowStart + m_Settings.GroupSelectionXCount, groupCount);
-
-                    for (var index = rowStart; index < rowEnd; ++index)
-                    {
-                        var group = m_GroupInstanceList[index];
-
-                        GUI.contentColor = group.FontColor;
-                        GUI.backgroundColor = group.BackgroundColor;
-
-                        if (GUILayout.Button(group.GroupName,
-                                selected == index ? m_GuiStyleGroupBold : m_GuiStyleGroup, guiWidth))
-                        {
-                            selected = index;
-                        }
-                    }
-                }
-            }
-
-            GUI.contentColor = contentColor;
-            GUI.backgroundColor = backgroundColor;
-            return selected;
         }
 
         private void EnsureGroupSelectionHeight()
         {
             const int FooterHeight = 30;
-            const int VerticalPadding = 8;
+            const int RowHeight = 22;
+            const int VerticalPadding = 16;
 
             var columnCount = Math.Max(1, m_Settings.GroupSelectionXCount);
             var rowCount = Math.Max(1, (m_GroupInstanceList.Count + columnCount - 1) / columnCount);
-            var rowHeight = EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
-            var requiredHeight = (int)Math.Ceiling(rowCount * rowHeight) + FooterHeight + VerticalPadding;
+            var requiredHeight = rowCount * RowHeight + FooterHeight + VerticalPadding;
 
             m_Settings.GroupSelectionHeight = Math.Max(64, requiredHeight);
         }
+
+        // ------------------------------------------------------------------ groups
 
         private void AddGroup()
         {
@@ -455,11 +621,8 @@ namespace AssetLauncher
                 {
                     Id = index,
                     GroupName = $"group{newGroupIndex}",
-                    OnModified = SaveGroup,
-                    OnModifiedName = ModifiedGroupName,
-                    Settings = m_Settings,
-                    Shared = m_Shared,
                 };
+                WireGroup(group);
                 m_GroupInstanceList.Add(group);
 
                 // Refresh
@@ -468,14 +631,19 @@ namespace AssetLauncher
 
                 EnsureGroupSelectionHeight();
                 SaveSettings();
-                CreateGUI();
+
+                if (m_LayoutRoot != null)
+                {
+                    BuildLayout();
+                }
+
                 return;
             }
         }
 
         private void RemoveGroup(int index)
         {
-            if (index >= m_GroupInstanceList.Count)
+            if (index < 0 || index >= m_GroupInstanceList.Count)
             {
                 return;
             }
@@ -494,7 +662,11 @@ namespace AssetLauncher
 
             EnsureGroupSelectionHeight();
             SaveSettings();
-            CreateGUI();
+
+            if (m_LayoutRoot != null)
+            {
+                BuildLayout();
+            }
         }
 
         private void SelectGroup(int index)
@@ -503,9 +675,13 @@ namespace AssetLauncher
                 ? Math.Clamp(index, 0, m_GroupInstanceList.Count - 1)
                 : 0;
 
-            GUI.FocusControl("");
             CurrentGroup?.RefreshEditor();
+
+            BindCurrentGroup();
+            RefreshGroupButtons();
         }
+
+        // ------------------------------------------------------------------ persistence
 
         private static T LoadJson<T>(string path) where T : new()
         {
@@ -544,46 +720,18 @@ namespace AssetLauncher
             SaveJson(GetGroupDataPath(group.Id), group);
         }
 
-        private void ModifiedGroupName(AssetLauncherGroup group)
+        private void OnGroupModified(AssetLauncherGroup group)
         {
             SaveGroup(group);
         }
 
-        private void InitializeGuiStyles()
+        private void OnGroupModifiedName(AssetLauncherGroup group)
         {
-            if (m_GuiStyleGroup != null)
-            {
-                return;
-            }
-
-            var buttonTextAnchor = m_Settings.ButtonTextAnchor switch
-            {
-                ButtonTextAnchor.Left => TextAnchor.MiddleLeft,
-                ButtonTextAnchor.Center => TextAnchor.MiddleCenter,
-                _ => TextAnchor.MiddleRight
-            };
-
-            m_GuiContentPlus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Plus"));
-            m_GuiContentMinus = new GUIContent(EditorGUIUtility.IconContent("Toolbar Minus"));
-            m_GuiContentFolder = new GUIContent(EditorGUIUtility.IconContent("Folder Icon"));
-            m_GuiContentFolder.tooltip = "Open the tool data folder.";
-
-            m_GuiStyleGroup = new GUIStyle(GUI.skin.button)
-            {
-                alignment = buttonTextAnchor
-            };
-            m_GuiStyleGroupBold = new GUIStyle(GUI.skin.button)
-            {
-                alignment = buttonTextAnchor,
-                fontStyle = FontStyle.BoldAndItalic,
-                fontSize = 14,
-            };
+            SaveGroup(group);
+            RefreshGroupButtons();
         }
 
-        private void ResetGuiStyles()
-        {
-            m_GuiStyleGroup = null;
-        }
+        // ------------------------------------------------------------------ shortcuts
 
         private void ProcessShortcutKey()
         {

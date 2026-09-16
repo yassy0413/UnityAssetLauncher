@@ -5,23 +5,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.IMGUI.Controls;
 using UnityEditor.Timeline;
-using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Timeline;
 using Object = UnityEngine.Object;
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 
 namespace AssetLauncher
 {
+    /// <summary>
+    /// A launcher group: a named, colored list of target assets plus the currently selected item.
+    /// This class holds data and behaviour only; drawing is done by the views in Editor/UI.
+    /// </summary>
     [Serializable]
     internal sealed class AssetLauncherGroup
     {
-        private const int kCommentSpace = 8;
-        private const int kInvalidIndex = -1;
+        public const int kInvalidIndex = -1;
 
         [SerializeField]
         private int m_Id;
@@ -37,8 +35,11 @@ namespace AssetLauncher
         [SerializeField]
         private List<AssetLauncherItem> m_ItemList = new();
 
+        // Kept for JSON compatibility with data written by 1.0.x. No longer used by the UI.
+#pragma warning disable 414
         [SerializeField]
         private bool m_FoldOut = true;
+#pragma warning restore 414
 
         [SerializeField]
         private int m_SelectIndex;
@@ -49,17 +50,20 @@ namespace AssetLauncher
         [SerializeField]
         private Color m_BackgroundColor = Color.white;
 
-        private Object? m_SelectItemObject;
-        private ReorderableList? m_ReorderableList;
-        private Vector2 m_ScrollPosition;
-        private GUILayoutOption? m_ColorGuiWidth;
-
+        /// <summary>Raised whenever the group's persisted data changed (the window saves it).</summary>
         public Action<AssetLauncherGroup> OnModified { get; set; } = _ => { };
+
+        /// <summary>Raised when something shown on the group button changed (name, colors, shortcut key).</summary>
         public Action<AssetLauncherGroup> OnModifiedName { get; set; } = _ => { };
+
+        /// <summary>Raised when the current item changed, so views can refresh highlight and inspector.</summary>
+        public Action<AssetLauncherGroup> OnSelectionChanged { get; set; } = _ => { };
+
+        /// <summary>Raised when the item list changed (add / remove / reorder).</summary>
+        public Action<AssetLauncherGroup> OnItemsChanged { get; set; } = _ => { };
+
         public AssetLauncherWindow.Settings Settings { get; set; } = new();
         public AssetLauncherWindow.Shared Shared { get; set; } = new();
-        public Color FontColor => m_FontColor;
-        public Color BackgroundColor => m_BackgroundColor;
 
         public int Id
         {
@@ -73,172 +77,197 @@ namespace AssetLauncher
             set => m_GroupName = value;
         }
 
+        public Color FontColor
+        {
+            get => m_FontColor;
+            set => m_FontColor = value;
+        }
+
+        public Color BackgroundColor
+        {
+            get => m_BackgroundColor;
+            set => m_BackgroundColor = value;
+        }
+
 #if ENABLE_INPUT_SYSTEM
-        public AssetLauncherShortcutKey ShortcutKey =>
-            m_ShortcutKey;
+        public AssetLauncherShortcutKey ShortcutKey
+        {
+            get => m_ShortcutKey;
+            set => m_ShortcutKey = value;
+        }
 #endif
 
-        private AssetLauncherItem? CurrentItem =>
+        /// <summary>The live item list. Views may use it as a ListView items source; mutate it through this class.</summary>
+        public List<AssetLauncherItem> Items => m_ItemList;
+
+        public int SelectIndex => m_SelectIndex;
+
+        public AssetLauncherItem? CurrentItem =>
             m_SelectIndex >= 0 && m_SelectIndex < m_ItemList.Count
                 ? m_ItemList[m_SelectIndex]
                 : null;
 
-        public void DrawHeader()
+        public Object? CurrentAsset => CurrentItem?.Asset;
+
+        // ------------------------------------------------------------------ items
+
+        public void AddAssetPaths(IEnumerable<string> paths) =>
+            InsertAssetPaths(m_ItemList.Count, paths);
+
+        /// <summary>Insert assets before <paramref name="index"/> (0 = top, Count = append).</summary>
+        public void InsertAssetPaths(int index, IEnumerable<string> paths)
         {
-            GUILayout.Space(8);
+            var newItems = paths
+                .Where(static x => !string.IsNullOrEmpty(x))
+                .Select(AssetDatabase.LoadMainAssetAtPath)
+                .Where(static x => x != null)
+                .Select(static x => new AssetLauncherItem { Asset = x })
+                .ToList();
 
-            using (new GUILayout.HorizontalScope())
-            {
-                var groupName = EditorGUILayout.TextField("Group Name", m_GroupName);
-                if (groupName != m_GroupName)
-                {
-                    m_GroupName = groupName;
-                    OnModifiedName.Invoke(this);
-                }
-
-                m_ColorGuiWidth ??= GUILayout.Width(40);
-
-                var fontColor = EditorGUILayout.ColorField(string.Empty, m_FontColor, m_ColorGuiWidth);
-                if (fontColor != m_FontColor)
-                {
-                    m_FontColor = fontColor;
-                    OnModified.Invoke(this);
-                }
-
-                var backgroundColor = EditorGUILayout.ColorField(string.Empty, m_BackgroundColor, m_ColorGuiWidth);
-                if (backgroundColor != m_BackgroundColor)
-                {
-                    m_BackgroundColor = backgroundColor;
-                    OnModified.Invoke(this);
-                }
-            }
-
-#if ENABLE_INPUT_SYSTEM
-            using (new EditorGUI.DisabledScope(Keyboard.current == null))
-            {
-                var shortcutKeyCode =
-                    (AssetLauncherShortcutKey)EditorGUILayout.EnumPopup("Shortcut Key (Ctrl+)", m_ShortcutKey);
-                if (shortcutKeyCode != m_ShortcutKey)
-                {
-                    m_ShortcutKey = shortcutKeyCode;
-                    OnModifiedName.Invoke(this);
-                }
-            }
-#endif
-
-            UpdateFoldOutTargetList(FoldOutWithMouseDown(m_FoldOut, "Target List"));
-            if (TryAcceptDropOnRect(GUILayoutUtility.GetLastRect(), out var paths))
-            {
-                foreach (var path in paths)
-                {
-                    m_ItemList.Add(new AssetLauncherItem
-                    {
-                        Asset = AssetDatabase.LoadAssetAtPath<Object>(path)
-                    });
-                }
-
-                OnModified.Invoke(this);
-            }
-
-            if (m_FoldOut)
-            {
-                SetupReorderableList();
-                m_ReorderableList?.DoLayoutList();
-            }
-        }
-
-        public void DrawBody()
-        {
-            var currentItem = CurrentItem;
-
-            using (new GUILayout.HorizontalScope())
-            {
-                var buttonLabel = new GUIContent(currentItem?.NameWithComment);
-                var buttonStyle = EditorStyles.popup;
-
-                GUILayout.Label("Item Selection", GUILayout.Width(100));
-
-                var rect = GUILayoutUtility.GetRect(buttonLabel, buttonStyle);
-                if (GUI.Button(rect, buttonLabel, buttonStyle))
-                {
-                    new TargetDropdown(
-                            queryItemList: Enumerable.Range(0, m_ItemList.Count)
-                                .Select(x => (m_ItemList[x].NameWithComment, x)),
-                            onItemSelected: SelectItem)
-                        .Show(rect);
-                }
-            }
-
-            GUILayout.Box(string.Empty, GUILayout.ExpandWidth(true), GUILayout.Height(4));
-
-            using var scroll = new GUILayout.ScrollViewScope(m_ScrollPosition);
-            m_ScrollPosition = scroll.scrollPosition;
-
-            if (Shared.Editor == null || currentItem == null)
+            if (newItems.Count <= 0)
             {
                 return;
             }
 
-            using var _ = new EditorGUILayout.VerticalScope();
+            index = Math.Clamp(index, 0, m_ItemList.Count);
+            m_ItemList.InsertRange(index, newItems);
 
-            if (m_SelectItemObject is TimelineAsset timelineAsset)
+            if (m_SelectIndex >= index)
             {
-                if (GUILayout.Button("Open Timeline Editor"))
-                {
-                    OpenTimelineEditor(timelineAsset);
-                }
-
-                GUILayout.Space(8);
+                m_SelectIndex += newItems.Count;
             }
 
-            var hierarchyMode = EditorGUIUtility.hierarchyMode;
-            EditorGUIUtility.hierarchyMode = false;
-            {
-                if (Shared.Editor is MaterialEditor)
-                {
-                    Shared.Editor.DrawHeader();
-                }
-
-                Shared.Editor.OnInspectorGUI();
-            }
-            EditorGUIUtility.hierarchyMode = hierarchyMode;
+            OnModified.Invoke(this);
+            OnItemsChanged.Invoke(this);
         }
 
-        public static bool FoldOutWithMouseDown(bool foldOut, string content)
+        public void RemoveItems(IEnumerable<int> indices)
         {
-            var newFoldOut = EditorGUILayout.Foldout(foldOut, content);
+            var targets = indices
+                .Where(x => x >= 0 && x < m_ItemList.Count)
+                .Distinct()
+                .OrderByDescending(static x => x)
+                .ToList();
 
-            if (newFoldOut != foldOut)
+            if (targets.Count <= 0)
             {
-                return newFoldOut;
+                return;
             }
 
-            var currentEvent = Event.current;
+            var removedCurrent = targets.Contains(m_SelectIndex);
+            var shift = targets.Count(x => x < m_SelectIndex);
+            var minRemoved = targets[targets.Count - 1];
 
-            if (currentEvent.type == EventType.MouseDown)
+            foreach (var index in targets)
             {
-                if (GUILayoutUtility.GetLastRect().Contains(currentEvent.mousePosition))
-                {
-                    currentEvent.Use();
-                    return !foldOut;
-                }
+                m_ItemList.RemoveAt(index);
             }
 
-            return foldOut;
+            int newIndex;
+            if (m_ItemList.Count <= 0)
+            {
+                newIndex = kInvalidIndex;
+            }
+            else if (removedCurrent)
+            {
+                // Same rule as the previous ReorderableList implementation: fall back to the item above.
+                newIndex = minRemoved - 1;
+            }
+            else
+            {
+                newIndex = m_SelectIndex - shift;
+            }
+
+            OnItemsChanged.Invoke(this);
+            SelectItem(newIndex);
+        }
+
+        /// <summary>Called after a ListView reorder already moved the element inside <see cref="Items"/>.</summary>
+        public void NotifyItemMoved(int from, int to)
+        {
+            if (from == to)
+            {
+                return;
+            }
+
+            if (m_SelectIndex == from)
+            {
+                m_SelectIndex = to;
+            }
+            else if (from < m_SelectIndex && to >= m_SelectIndex)
+            {
+                --m_SelectIndex;
+            }
+            else if (from > m_SelectIndex && to <= m_SelectIndex)
+            {
+                ++m_SelectIndex;
+            }
+
+            OnModified.Invoke(this);
+            // The ListView already reflects the move; only the "current" highlight may have changed.
+            OnSelectionChanged.Invoke(this);
+        }
+
+        public void SetComment(int index, string comment)
+        {
+            if (index < 0 || index >= m_ItemList.Count)
+            {
+                return;
+            }
+
+            if (m_ItemList[index].Comment == comment)
+            {
+                return;
+            }
+
+            m_ItemList[index].Comment = comment;
+            OnModified.Invoke(this);
+        }
+
+        // ------------------------------------------------------------------ selection
+
+        public void SelectItem(int index)
+        {
+            if (index < 0 || index >= m_ItemList.Count)
+            {
+                index = kInvalidIndex;
+            }
+
+            m_SelectIndex = index;
+            OnModified.Invoke(this);
+
+            RefreshEditor();
+            OnSelectionChanged.Invoke(this);
+        }
+
+        public void DeselectItem() => SelectItem(kInvalidIndex);
+
+        /// <summary>Clamp the persisted selection into range (used right after loading).</summary>
+        public void EnsureSelection()
+        {
+            if (m_ItemList.Count <= 0)
+            {
+                m_SelectIndex = kInvalidIndex;
+                return;
+            }
+
+            m_SelectIndex = Math.Clamp(m_SelectIndex, kInvalidIndex, m_ItemList.Count - 1);
         }
 
         public void RefreshEditor()
         {
             var currentItem = CurrentItem;
-            if (currentItem == null)
+            var currentAsset = currentItem?.Asset;
+            if (currentItem == null || currentAsset == null)
             {
+                Shared.ClearEditor();
                 return;
             }
 
-            var path = AssetDatabase.GetAssetPath(currentItem.Asset);
+            var path = AssetDatabase.GetAssetPath(currentAsset);
             var requiredImporterEditor = false;
 
-            switch (currentItem.Asset)
+            switch (currentAsset)
             {
                 case DefaultAsset:
                     if (!AssetDatabase.IsValidFolder(path))
@@ -273,17 +302,13 @@ namespace AssetLauncher
             {
                 Shared.SetImporterEditor(path);
             }
-            else if (currentItem.Asset != null)
-            {
-                Shared.SetEditor(currentItem.Asset);
-            }
             else
             {
-                Shared.ClearEditor();
+                Shared.SetEditor(currentAsset);
             }
         }
 
-        private void OpenTimelineEditor(TimelineAsset timelineAsset)
+        public static void OpenTimelineEditor(TimelineAsset timelineAsset)
         {
             var window = TimelineEditor.GetOrCreateWindow();
 
@@ -301,220 +326,7 @@ namespace AssetLauncher
             }
         }
 
-        private void SetupReorderableList()
-        {
-            if (m_ReorderableList != null)
-            {
-                return;
-            }
-
-            var elementType = typeof(Object);
-
-            m_ReorderableList = new ReorderableList(m_ItemList, elementType)
-            {
-                draggable = true,
-                multiSelect = true,
-                elementHeightCallback = index => EditorGUIUtility.singleLineHeight,
-                headerHeight = 0,
-
-                drawElementCallback = (rect, index, isActive, isFocused) =>
-                {
-                    rect.height = EditorGUIUtility.singleLineHeight;
-
-                    var item = m_ItemList[index];
-                    var modified = false;
-
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        var commentWidth = Settings.EnabledItemComment ? Settings.ItemCommentWidth : 0;
-                        var commentSpace = Settings.EnabledItemComment ? kCommentSpace : 0;
-
-                        var objectFieldRect = new Rect(
-                            rect.x, rect.y, rect.width - commentWidth - commentSpace, rect.height);
-
-                        var asset = EditorGUI.ObjectField(objectFieldRect, item.Asset, elementType, false);
-                        if (!ReferenceEquals(asset, item.Asset))
-                        {
-                            item.Asset = asset;
-                            modified = true;
-
-                            if (index == m_SelectIndex)
-                            {
-                                m_SelectItemObject = asset;
-                                RefreshEditor();
-                            }
-                        }
-
-                        if (commentWidth > 0)
-                        {
-                            var commentRect = new Rect(
-                                rect.x + rect.width - commentWidth, rect.y, commentWidth, rect.height);
-                            var comment = EditorGUI.TextField(commentRect, item.Comment);
-                            if (comment != item.Comment)
-                            {
-                                item.Comment = comment;
-                                modified = true;
-                            }
-                        }
-                    }
-
-                    if (modified)
-                    {
-                        OnModified.Invoke(this);
-                    }
-                },
-
-                onSelectCallback = list =>
-                {
-                    if (list.selectedIndices.Count >= 1)
-                    {
-                        if (list.selectedIndices.Contains(m_SelectIndex))
-                        {
-                            return;
-                        }
-
-                        SelectItem(list.selectedIndices[0]);
-                        return;
-                    }
-
-                    DeSelectItem();
-                },
-
-                onAddCallback = list =>
-                {
-                    m_ItemList.Add(new AssetLauncherItem());
-                    OnModified.Invoke(this);
-                },
-
-                onRemoveCallback = list =>
-                {
-                    if (m_ItemList.Count <= 0)
-                    {
-                        return;
-                    }
-
-                    switch (list.selectedIndices.Count)
-                    {
-                        case > 1:
-                            foreach (var index in list.selectedIndices.Reverse())
-                            {
-                                m_ItemList.RemoveAt(index);
-                            }
-
-                            DeSelectItem();
-                            break;
-
-                        case 1:
-                            m_ItemList.RemoveAt(list.selectedIndices[0]);
-                            do
-                            {
-                                if (m_ItemList.Count <= 0)
-                                {
-                                    DeSelectItem();
-                                    break;
-                                }
-
-                                var newIndex = list.selectedIndices[0] - 1;
-                                if (newIndex < 0)
-                                {
-                                    DeSelectItem();
-                                    break;
-                                }
-
-                                SelectItem(newIndex);
-                            } while (false);
-
-                            break;
-
-                        default:
-                            m_ItemList.RemoveAt(m_ItemList.Count - 1);
-                            OnModified.Invoke(this);
-                            break;
-                    }
-                }
-            };
-
-            if (m_ItemList.Count <= 0)
-            {
-                return;
-            }
-
-            SelectItem(Math.Clamp(m_SelectIndex, kInvalidIndex, m_ItemList.Count - 1));
-        }
-
-        private static bool TryAcceptDropOnRect(Rect rect, out string[] paths)
-        {
-            var currentEvent = Event.current;
-
-            if (!rect.Contains(currentEvent.mousePosition))
-            {
-                paths = Array.Empty<string>();
-                return false;
-            }
-
-            switch (currentEvent.type)
-            {
-                case EventType.DragUpdated:
-                    DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
-                    currentEvent.Use();
-                    break;
-
-                case EventType.DragPerform:
-                    paths = DragAndDrop.paths;
-                    DragAndDrop.AcceptDrag();
-                    currentEvent.Use();
-                    return true;
-            }
-
-            paths = Array.Empty<string>();
-            return false;
-        }
-
-        private void UpdateFoldOutTargetList(bool on)
-        {
-            if (m_FoldOut == on)
-            {
-                return;
-            }
-
-            m_FoldOut = on;
-            OnModified.Invoke(this);
-        }
-
-        private void SelectItem(int index)
-        {
-            m_SelectIndex = index;
-
-            m_SelectItemObject = null;
-
-            OnModified.Invoke(this);
-
-            if (m_ReorderableList != null)
-            {
-                if (m_ReorderableList.index != m_SelectIndex)
-                {
-                    if (m_SelectIndex < 0)
-                        m_ReorderableList.ClearSelection();
-                    else
-                        m_ReorderableList.index = m_SelectIndex;
-                }
-            }
-
-            if (index < 0)
-            {
-                return;
-            }
-
-            m_SelectItemObject = m_ItemList[index].Asset;
-            RefreshEditor();
-        }
-
-        private void DeSelectItem()
-        {
-            SelectItem(kInvalidIndex);
-        }
-
-        private Object? GetFirstContainsAsset(string path)
+        private static Object? GetFirstContainsAsset(string path)
         {
             var dir = Directory
                 .GetDirectories(path, "*", SearchOption.TopDirectoryOnly)
@@ -530,50 +342,6 @@ namespace AssetLauncher
                 .FirstOrDefault(static x => !x.EndsWith(".meta", StringComparison.InvariantCulture));
 
             return string.IsNullOrEmpty(meta) ? null : AssetDatabase.LoadAssetAtPath<Object>(meta);
-        }
-
-        private sealed class TargetDropdownItem : AdvancedDropdownItem
-        {
-            public int Index { get; }
-
-            public TargetDropdownItem(string name, int index) : base(name)
-            {
-                Index = index;
-            }
-        }
-
-        private sealed class TargetDropdown : AdvancedDropdown
-        {
-            private readonly IEnumerable<(string name, int id)> m_QueryItemList;
-            private readonly Action<int> m_OnItemSelected;
-
-            public TargetDropdown(IEnumerable<(string name, int id)> queryItemList, Action<int> onItemSelected)
-                : base(new AdvancedDropdownState())
-            {
-                m_QueryItemList = queryItemList;
-                m_OnItemSelected = onItemSelected;
-            }
-
-            protected override void ItemSelected(AdvancedDropdownItem item)
-            {
-                if (item is TargetDropdownItem v)
-                {
-                    m_OnItemSelected?.Invoke(v.Index);
-                }
-            }
-
-            protected override AdvancedDropdownItem BuildRoot()
-            {
-                var root = new AdvancedDropdownItem(string.Empty);
-                root.AddChild(new TargetDropdownItem(string.Empty, -1));
-
-                foreach (var (name, index) in m_QueryItemList)
-                {
-                    root.AddChild(new TargetDropdownItem(name, index));
-                }
-
-                return root;
-            }
         }
     }
 }

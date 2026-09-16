@@ -61,13 +61,13 @@ When the Unity Input System is enabled, each group can also be assigned a `Ctrl 
 
 ## Items
 
-Add assets to the current group by:
+Add assets to the current group by dragging them from the Project window onto the target list. A marker shows where they will be inserted: drop between two rows to insert there, or on the empty space below the rows to append.
 
-- Dragging assets into the `Target List` foldout area.
-- Pressing the `+` button in the target list.
-- Assigning an asset manually in the object field.
+Each row shows the asset icon and the asset name:
 
-Selecting an item shows its Inspector in the launcher window.
+- Click a row to select the asset in the Project window (it is also pinged) and show its Inspector in the launcher window.
+- Drag a row to reorder items.
+- Right-click a row and choose `Remove`, or press `Delete` / `Backspace` while the list has focus, to delete it. When several rows are selected, all of them are removed.
 
 For folders, the launcher pings the first contained asset so you can jump into the folder quickly.
 
@@ -98,6 +98,7 @@ Open the `Settings` foldout at the top of the launcher window to configure:
 - Group selection column count
 - Item comment visibility
 - Item comment width
+- Item font size (target list rows)
 - Group button text alignment
 - Layout mode
 
@@ -105,6 +106,8 @@ The launcher supports two layout modes:
 
 - `Vertical`: Group selector at the top, Inspector below.
 - `Horizontal`: Group selector and target list on the left, Inspector on the right.
+
+In the `Vertical` layout the boundary between the target list and the Inspector can be dragged.
 
 Use the folder icon in the header to reveal the launcher data folder in Finder / Explorer.
 

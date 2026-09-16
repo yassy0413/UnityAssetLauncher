@@ -1,0 +1,270 @@
+/* Asset Launcher - UI Toolkit styles
+   Spacing constants are collected here so the panel margins can be tuned in one place. */
+
+.al-root {
+    --al-pane-padding: 6px;
+    --al-pane-gap: 8px;
+    --al-section-gap: 8px;
+    --al-row-height: 20px;
+    --al-row-icon: 16px;
+    --al-row-padding-x: 4px;
+    --al-label-width: 200px;
+
+    flex-grow: 1;
+}
+
+/* ---------- Settings header ---------- */
+
+.al-header {
+    flex-direction: row;
+    padding-top: var(--al-pane-gap);
+    padding-right: var(--al-pane-gap);
+    padding-left: 2px;
+}
+
+.al-header__settings {
+    flex-grow: 1;
+}
+
+.al-header__settings .unity-base-field__label {
+    min-width: var(--al-label-width);
+}
+
+.al-header__settings .unity-foldout__content {
+    margin-left: 16px;
+    padding-bottom: 16px;
+}
+
+.al-icon-button {
+    width: 24px;
+    height: 20px;
+    padding: 0;
+    margin-left: 4px;
+    align-items: center;
+    justify-content: center;
+}
+
+.al-icon-button > .unity-image {
+    width: 16px;
+    height: 16px;
+}
+
+/* ---------- Group selector ---------- */
+
+.al-group-selector {
+    flex-grow: 1;
+    padding-top: var(--al-pane-padding);
+    padding-right: var(--al-pane-gap);
+    padding-bottom: 0;
+    padding-left: var(--al-pane-gap);
+}
+
+.al-box {
+    flex-grow: 1;
+    border-width: 1px;
+    border-radius: 3px;
+    border-color: var(--unity-colors-helpbox-border);
+    background-color: var(--unity-colors-helpbox-background);
+    padding: 4px;
+}
+
+.al-group-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+}
+
+.al-group-button {
+    margin: 1px;
+    padding-left: 6px;
+    padding-right: 6px;
+    height: 20px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.al-group-button--selected {
+    -unity-font-style: bold-and-italic;
+    font-size: 14px;
+}
+
+.al-anchor-left   { -unity-text-align: middle-left; }
+.al-anchor-center { -unity-text-align: middle-center; }
+.al-anchor-right  { -unity-text-align: middle-right; }
+
+.al-group-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+    height: 30px;
+    align-items: center;
+    padding-right: var(--al-pane-gap);
+}
+
+/* ---------- Group pane (header + target list / inspector) ---------- */
+
+.al-group-pane {
+    flex-grow: 1;
+    padding-top: 0;
+    padding-right: var(--al-pane-gap);
+    padding-bottom: 0;
+    padding-left: var(--al-pane-gap);
+}
+
+.al-group-header {
+    padding-top: var(--al-section-gap);
+    padding-bottom: 4px;
+}
+
+.al-group-header__row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.al-group-header__name {
+    flex-grow: 1;
+}
+
+.al-group-header__color {
+    width: 40px;
+    margin-left: 4px;
+}
+
+.al-group-header__color .unity-base-field__label {
+    display: none;
+}
+
+/* ---------- Target list ---------- */
+
+.al-target-list {
+    flex-grow: 1;
+    min-height: 40px;
+    border-width: 1px;
+    border-radius: 3px;
+    border-color: transparent;
+}
+
+.al-target-list--drop-active {
+    border-color: var(--unity-colors-highlight-background);
+    background-color: rgba(88, 140, 200, 0.10);
+}
+
+.al-target-list > .unity-list-view {
+    flex-grow: 1;
+}
+
+.al-target-list__placeholder {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    -unity-text-align: middle-center;
+    color: var(--unity-colors-label-text);
+    opacity: 0.4;
+    font-size: 12px;
+}
+
+.al-target-list__drop-marker {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    height: 2px;
+    background-color: var(--unity-colors-highlight-background);
+    border-radius: 1px;
+}
+
+.al-row {
+    flex-direction: row;
+    align-items: center;
+    height: var(--al-row-height);
+    padding-left: var(--al-row-padding-x);
+    padding-right: var(--al-row-padding-x);
+}
+
+.al-row__icon {
+    width: var(--al-row-icon);
+    height: var(--al-row-icon);
+    min-width: var(--al-row-icon);
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.al-row__name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+.al-row:hover .al-row__name {
+    color: var(--unity-colors-default-text-hover);
+}
+
+.al-row--current .al-row__name {
+    -unity-font-style: bold;
+}
+
+.al-row--current .al-row__icon {
+    border-left-width: 2px;
+    border-color: var(--unity-colors-highlight-background);
+}
+
+.al-row__name--missing {
+    opacity: 0.5;
+    -unity-font-style: italic;
+}
+
+.al-row__comment {
+    margin: 0 0 0 8px;
+    flex-shrink: 0;
+}
+
+.al-row__comment .unity-base-text-field__input {
+    opacity: 0.8;
+}
+
+/* ---------- Inspector pane ---------- */
+
+.al-inspector {
+    flex-grow: 1;
+    padding-top: 4px;
+}
+
+.al-inspector__selection-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.al-inspector__selection-label {
+    width: 100px;
+    min-width: 100px;
+}
+
+.al-popup-button {
+    flex-grow: 1;
+    -unity-text-align: middle-left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-left: 0;
+}
+
+.al-separator {
+    height: 4px;
+    margin: 2px 0 4px 0;
+    background-color: var(--unity-colors-helpbox-border);
+    border-radius: 2px;
+}
+
+.al-inspector__timeline-button {
+    margin-bottom: var(--al-section-gap);
+}
+
+.al-inspector__editor {
+    flex-grow: 1;
+}
