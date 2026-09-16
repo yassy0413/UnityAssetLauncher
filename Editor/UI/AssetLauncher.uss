@@ -78,15 +78,25 @@
     margin: 1px;
     padding-left: 6px;
     padding-right: 6px;
-    height: 20px;
+    height: 22px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    opacity: 0.6;
+    /* Reserve the accent line so selecting a tab never shifts the layout. */
+    border-bottom-width: 3px;
+    border-bottom-color: transparent;
 }
 
-.al-group-button--selected {
-    -unity-font-style: bold-and-italic;
-    font-size: 14px;
+.al-group-button:hover {
+    opacity: 0.85;
+}
+
+.al-group-button--selected,
+.al-group-button--selected:hover {
+    opacity: 1;
+    -unity-font-style: bold;
+    border-bottom-color: var(--unity-colors-highlight-background);
 }
 
 .al-anchor-left   { -unity-text-align: middle-left; }

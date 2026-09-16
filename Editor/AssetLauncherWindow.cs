@@ -584,7 +584,7 @@ namespace AssetLauncher
         private void EnsureGroupSelectionHeight()
         {
             const int FooterHeight = 30;
-            const int RowHeight = 22;
+            const int RowHeight = 24;
             const int VerticalPadding = 16;
 
             var columnCount = Math.Max(1, m_Settings.GroupSelectionXCount);
