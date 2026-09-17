@@ -12,6 +12,7 @@ namespace AssetLauncher
     /// Target asset list of a group, drawn as a flat "icon + name" list.
     ///
     ///  - Click a row     : select the asset in the Project window (ping it) and show its Editor in the inspector pane.
+    ///  - Double click   : open the asset; frame scene objects like the Hierarchy.
     ///  - Right click     : context menu with "Remove".
     ///  - Drag rows       : reorder.
     ///  - Drop assets     : anywhere on this element; they are inserted at the highlighted position
@@ -33,6 +34,8 @@ namespace AssetLauncher
         private readonly VisualElement m_DropMarker;
         private ScrollView? m_ScrollView;
         private int m_DropInsertIndex = -1;
+        private readonly List<VisualElement> m_BoundRows = new();
+        private IVisualElementScheduledItem? m_RefreshTask;
 
         private static Texture2D? s_MissingIcon;
 
@@ -102,7 +105,9 @@ namespace AssetLauncher
         {
             style.fontSize = FontSize;
             m_ListView.fixedItemHeight = RowHeight;
+            m_BoundRows.Clear();
             m_ListView.Rebuild();
+            m_ScrollView = null;
             m_Placeholder.style.display = m_Group.Items.Count <= 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
@@ -158,6 +163,18 @@ namespace AssetLauncher
                 }
 
                 m_Group.SelectItem(data.Index);
+                if (evt.clickCount == 2 && asset != null)
+                {
+                    if (!EditorUtility.IsPersistent(asset) && (asset is GameObject || asset is Component))
+                    {
+                        SceneView.FrameLastActiveSceneView();
+                    }
+                    else
+                    {
+                        AssetDatabase.OpenAsset(asset);
+                    }
+                    evt.StopPropagation();
+                }
             });
 
             data.Comment = new TextField { isDelayed = true };
@@ -198,22 +215,15 @@ namespace AssetLauncher
             data.Index = index;
 
             var item = index >= 0 && index < m_Group.Items.Count ? m_Group.Items[index] : null;
-            var asset = item?.Asset;
-
-            if (asset != null)
+            var path = item?.AssetPath ?? string.Empty;
+            var exists = !string.IsNullOrEmpty(path);
+            data.Icon.image = exists ? AssetDatabase.GetCachedIcon(path) : MissingIcon;
+            data.Name.text = exists ? item!.Name : "(Missing)";
+            data.Name.tooltip = path;
+            data.Name.EnableInClassList(AssetLauncherStyles.RowNameMissing, !exists);
+            if (!m_BoundRows.Contains(row))
             {
-                var path = AssetDatabase.GetAssetPath(asset);
-                data.Icon.image = AssetDatabase.GetCachedIcon(path) ?? AssetPreview.GetMiniThumbnail(asset);
-                data.Name.text = asset.name;
-                data.Name.tooltip = path;
-                data.Name.RemoveFromClassList(AssetLauncherStyles.RowNameMissing);
-            }
-            else
-            {
-                data.Icon.image = MissingIcon;
-                data.Name.text = "(Missing)";
-                data.Name.tooltip = string.Empty;
-                data.Name.AddToClassList(AssetLauncherStyles.RowNameMissing);
+                m_BoundRows.Add(row);
             }
 
             row.EnableInClassList(AssetLauncherStyles.RowCurrent, index == m_Group.SelectIndex);
@@ -230,11 +240,13 @@ namespace AssetLauncher
             }
         }
 
-        private static void UnbindRow(VisualElement row, int index)
+        private void UnbindRow(VisualElement row, int index)
         {
             if (row.userData is RowElements data)
             {
                 data.Index = AssetLauncherGroup.kInvalidIndex;
+                data.Icon.image = null;
+                m_BoundRows.Remove(row);
             }
         }
 
@@ -245,9 +257,34 @@ namespace AssetLauncher
 
         // Deferred: these can be raised from inside ListView callbacks (e.g. after a reorder),
         // and rebuilding the list synchronously from there is not safe.
-        private void OnItemsChanged(AssetLauncherGroup _) => schedule.Execute(Rebuild);
+        private void OnItemsChanged(AssetLauncherGroup _)
+        {
+            if (m_RefreshTask == null)
+            {
+                m_RefreshTask = schedule.Execute(RefreshItems);
+            }
+            else
+            {
+                m_RefreshTask.ExecuteLater(0);
+            }
+        }
 
-        private void OnSelectionChanged(AssetLauncherGroup _) => schedule.Execute(() => m_ListView.RefreshItems());
+        public void RefreshItems()
+        {
+            m_ListView.RefreshItems();
+            m_Placeholder.style.display = m_Group.Items.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void OnSelectionChanged(AssetLauncherGroup _)
+        {
+            foreach (var row in m_BoundRows)
+            {
+                if (row.userData is RowElements data)
+                {
+                    row.EnableInClassList(AssetLauncherStyles.RowCurrent, data.Index == m_Group.SelectIndex);
+                }
+            }
+        }
 
         private void OnItemIndexChanged(int from, int to) => m_Group.NotifyItemMoved(from, to);
 

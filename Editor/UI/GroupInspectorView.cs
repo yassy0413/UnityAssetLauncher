@@ -113,6 +113,7 @@ namespace AssetLauncher
 
             var hierarchyMode = EditorGUIUtility.hierarchyMode;
             EditorGUIUtility.hierarchyMode = false;
+            try
             {
                 if (editor is MaterialEditor)
                 {
@@ -121,7 +122,10 @@ namespace AssetLauncher
 
                 editor.OnInspectorGUI();
             }
-            EditorGUIUtility.hierarchyMode = hierarchyMode;
+            finally
+            {
+                EditorGUIUtility.hierarchyMode = hierarchyMode;
+            }
         }
     }
 }

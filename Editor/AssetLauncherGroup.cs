@@ -62,8 +62,7 @@ namespace AssetLauncher
         /// <summary>Raised when the item list changed (add / remove / reorder).</summary>
         public Action<AssetLauncherGroup> OnItemsChanged { get; set; } = _ => { };
 
-        public AssetLauncherWindow.Settings Settings { get; set; } = new();
-        public AssetLauncherWindow.Shared Shared { get; set; } = new();
+        public AssetLauncherWindow.Shared Shared { get; set; } = null!;
 
         public int Id
         {
@@ -119,9 +118,9 @@ namespace AssetLauncher
         {
             var newItems = paths
                 .Where(static x => !string.IsNullOrEmpty(x))
-                .Select(AssetDatabase.LoadMainAssetAtPath)
+                .Select(AssetLauncherItem.FromAssetPath)
                 .Where(static x => x != null)
-                .Select(static x => new AssetLauncherItem { Asset = x })
+                .Select(static x => x!)
                 .ToList();
 
             if (newItems.Count <= 0)
@@ -179,7 +178,7 @@ namespace AssetLauncher
             }
 
             OnItemsChanged.Invoke(this);
-            SelectItem(newIndex);
+            SelectItem(newIndex, forceRefresh: true);
         }
 
         /// <summary>Called after a ListView reorder already moved the element inside <see cref="Items"/>.</summary>
@@ -226,13 +225,19 @@ namespace AssetLauncher
 
         // ------------------------------------------------------------------ selection
 
-        public void SelectItem(int index)
+        public void SelectItem(int index, bool forceRefresh = false)
         {
             if (index < 0 || index >= m_ItemList.Count)
             {
                 index = kInvalidIndex;
             }
 
+            if (!forceRefresh && m_SelectIndex == index)
+            {
+                return;
+            }
+
+            CurrentItem?.ReleaseAsset();
             m_SelectIndex = index;
             OnModified.Invoke(this);
 
@@ -329,7 +334,7 @@ namespace AssetLauncher
         private static Object? GetFirstContainsAsset(string path)
         {
             var dir = Directory
-                .GetDirectories(path, "*", SearchOption.TopDirectoryOnly)
+                .EnumerateDirectories(path, "*", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault();
 
             if (!string.IsNullOrEmpty(dir))
@@ -338,7 +343,7 @@ namespace AssetLauncher
             }
 
             var meta = Directory
-                .GetFiles(path, "*", SearchOption.TopDirectoryOnly)
+                .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault(static x => !x.EndsWith(".meta", StringComparison.InvariantCulture));
 
             return string.IsNullOrEmpty(meta) ? null : AssetDatabase.LoadAssetAtPath<Object>(meta);

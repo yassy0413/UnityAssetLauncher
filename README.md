@@ -61,6 +61,8 @@ When the Unity Input System is enabled, each group can also be assigned a `Ctrl 
 
 ## Items
 
+Double-click an item to open prefabs, scenes, scripts, and other assets using Unity’s standard asset-opening behavior. Double-clicking a comment field edits its text.
+
 Add assets to the current group by dragging them from the Project window onto the target list. A marker shows where they will be inserted: drop between two rows to insert there, or on the empty space below the rows to append.
 
 Each row shows the asset icon and the asset name:

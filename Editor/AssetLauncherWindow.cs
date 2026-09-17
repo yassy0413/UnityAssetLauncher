@@ -25,6 +25,8 @@ namespace AssetLauncher
         private string m_SettingsPath = string.Empty;
         private Settings m_Settings = new();
         private readonly Shared m_Shared = new();
+        private IVisualElementScheduledItem? m_SaveSettingsTask;
+        private bool m_SettingsDirty;
 
         // UI Toolkit
         private VisualElement? m_LayoutRoot;
@@ -113,7 +115,9 @@ namespace AssetLauncher
 
         private void OnEnable()
         {
+            Instance = this;
             Setup();
+            EditorApplication.projectChanged += OnProjectChanged;
 
             foreach (var group in m_GroupInstanceList)
             {
@@ -123,9 +127,35 @@ namespace AssetLauncher
 
         private void OnDisable()
         {
+            EditorApplication.projectChanged -= OnProjectChanged;
+            m_SaveSettingsTask?.Pause();
+            FlushSettings();
+            rootVisualElement.Clear();
             m_Shared.ClearEditor();
+            foreach (var group in m_GroupInstanceList)
+            {
+                foreach (var item in group.Items)
+                {
+                    item.ReleaseAsset();
+                }
+            }
+            m_TargetListView = null;
+            m_LayoutRoot = m_GroupGrid = m_GroupHeaderHost = m_TargetListHost = m_InspectorHost = null;
+            if (Instance == this) Instance = null;
         }
 
+        private void OnProjectChanged()
+        {
+            foreach (var group in m_GroupInstanceList)
+            {
+                foreach (var item in group.Items) item.ReleaseAsset();
+            }
+            CurrentGroup?.RefreshEditor();
+            m_TargetListView?.RefreshItems();
+            if (CurrentGroup is { } current) current.OnSelectionChanged.Invoke(current);
+        }
+
+#if ENABLE_INPUT_SYSTEM
         private void Update()
         {
             if (m_GroupInstanceList.Count <= 0)
@@ -133,8 +163,9 @@ namespace AssetLauncher
                 return;
             }
 
-            ProcessShortcutKey();
+            if (hasFocus) ProcessShortcutKey();
         }
+#endif
 
         private void Setup()
         {
@@ -191,7 +222,6 @@ namespace AssetLauncher
         {
             group.OnModified = OnGroupModified;
             group.OnModifiedName = OnGroupModifiedName;
-            group.Settings = m_Settings;
             group.Shared = m_Shared;
         }
 
@@ -671,10 +701,12 @@ namespace AssetLauncher
 
         private void SelectGroup(int index)
         {
+            CurrentGroup?.CurrentItem?.ReleaseAsset();
             m_Settings.SelectGroupIndex = m_GroupInstanceList.Count > 0
                 ? Math.Clamp(index, 0, m_GroupInstanceList.Count - 1)
                 : 0;
 
+            m_Shared.ClearEditor();
             CurrentGroup?.RefreshEditor();
 
             BindCurrentGroup();
@@ -712,7 +744,22 @@ namespace AssetLauncher
 
         private void SaveSettings()
         {
+            m_SettingsDirty = true;
+            if (m_SaveSettingsTask == null)
+            {
+                m_SaveSettingsTask = rootVisualElement.schedule.Execute(FlushSettings).StartingIn(250);
+            }
+            else
+            {
+                m_SaveSettingsTask.ExecuteLater(250);
+            }
+        }
+
+        private void FlushSettings()
+        {
+            if (!m_SettingsDirty) return;
             SaveJson(m_SettingsPath, m_Settings);
+            m_SettingsDirty = false;
         }
 
         private void SaveGroup(AssetLauncherGroup group)
@@ -764,7 +811,7 @@ namespace AssetLauncher
                     continue;
                 }
 
-                if (keyboard[(Key)group.ShortcutKey].isPressed)
+                if (keyboard[(Key)group.ShortcutKey].wasPressedThisFrame)
                 {
                     SelectGroup(index);
                     SaveSettings();

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -31,7 +32,7 @@ namespace AssetLauncher
                     return null;
                 }
 
-                var path = AssetDatabase.GUIDToAssetPath(m_Guid);
+                var path = AssetPath;
                 if (string.IsNullOrEmpty(path))
                 {
                     return null;
@@ -52,13 +53,25 @@ namespace AssetLauncher
             }
         }
 
+        public static AssetLauncherItem? FromAssetPath(string path)
+        {
+            var guid = AssetDatabase.AssetPathToGUID(path);
+            return string.IsNullOrEmpty(guid) ? null : new AssetLauncherItem { m_Guid = guid };
+        }
+
         public string Comment
         {
             get => m_Comment;
             set => m_Comment = value;
         }
 
-        public string Name => Asset == null ? string.Empty : Asset.name;
+        // List labels must not load every asset (and its dependencies) into memory.
+        public string AssetPath => string.IsNullOrEmpty(m_Guid)
+            ? string.Empty : AssetDatabase.GUIDToAssetPath(m_Guid);
+
+        public void ReleaseAsset() => m_Asset = null;
+
+        public string Name => m_Asset != null ? m_Asset.name : Path.GetFileNameWithoutExtension(AssetPath);
         public string NameWithComment => string.IsNullOrEmpty(m_Comment) ? Name : $"{Name} ({m_Comment})";
     }
 }
