@@ -155,4 +155,4 @@ https://github.com/yassy0413/UnityAssetLauncher.git
 
 - Package name: `com.yassy.assetlauncher`
 - Unity version: `2020.1` 以降
-- License: `GPL-3.0`
+- License: `MIT-0`
